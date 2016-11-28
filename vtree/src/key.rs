@@ -1,13 +1,14 @@
 use std::fmt::{self, Write};
 use std::iter::IntoIterator;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Key {
 	U64(u64),
-	String(String),
+	String(Rc<String>),
 	Str(&'static str),
-	Bytes(Vec<u8>),
+	Bytes(Rc<Vec<u8>>),
 }
 
 impl fmt::Display for Key {
@@ -19,7 +20,7 @@ impl fmt::Display for Key {
 			&Key::Bytes(ref bytes) => {
 				let mut s = String::with_capacity(bytes.len() * 2 + 2);
 				try!(write!(&mut s, "0x"));
-				for &b in bytes {
+				for &b in bytes.iter() {
 					try!(write!(&mut s, "{:x}", b));
 				}
 				write!(f, "{}", s)

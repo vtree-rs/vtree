@@ -1,12 +1,11 @@
 use key::Key;
-use std::rc::Rc;
 use std::fmt;
 use std::iter::IntoIterator;
 use std::vec::IntoIter;
 
 #[derive(Clone, Debug)]
 pub enum PathNode {
-	Key(Rc<Key>),
+	Key(Key),
 	NodeField(&'static str),
 }
 
@@ -24,7 +23,7 @@ impl Path {
 
 	pub fn add_key(&self, k: Key) -> Path {
 		let mut p = self.path.clone();
-		p.push(PathNode::Key(Rc::new(k)));
+		p.push(PathNode::Key(k));
 		Path {
 			path: p,
 		}
