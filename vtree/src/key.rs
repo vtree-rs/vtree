@@ -2,6 +2,7 @@ use std::fmt::{self, Write};
 use std::iter::IntoIterator;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::convert::{From, Into};
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Key {
@@ -9,6 +10,34 @@ pub enum Key {
 	String(Rc<String>),
 	Str(&'static str),
 	Bytes(Rc<Vec<u8>>),
+}
+
+impl From<u64> for Key {
+	fn from(v: u64) -> Key {
+		Key::U64(v)
+	}
+}
+
+impl From<String> for Key {
+	fn from(v: String) -> Key {
+		Key::String(Rc::new(v))
+	}
+}
+
+impl From<&'static str> for Key {
+	fn from(v: &'static str) -> Key {
+		Key::Str(v)
+	}
+}
+
+impl From<Vec<u8>> for Key {
+	fn from(v: Vec<u8>) -> Key {
+		Key::Bytes(Rc::new(v))
+	}
+}
+
+pub fn key<T: Into<Key>>(key: T) -> Key {
+	key.into()
 }
 
 impl fmt::Display for Key {

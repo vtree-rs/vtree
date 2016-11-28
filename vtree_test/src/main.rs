@@ -3,7 +3,7 @@
 
 extern crate vtree;
 
-use vtree::key::{Key, KeyedDiff, KeyedNodes};
+use vtree::key::{Key, key, KeyedDiff, KeyedNodes};
 use vtree::widget::{Widget, WidgetData};
 use vtree::diff::{self, Diff};
 
@@ -177,14 +177,14 @@ fn main() {
 		},
 		child: KeyedNodes::with_data(vec![
 			(
-				Key::U64(0),
+				key(0),
 				GroupA::Widget(Box::new(
 					WidgetData::<GroupAWidget>("foo bar".to_string())
 				)),
 			),
 
 			(
-				Key::U64(1),
+				key(1),
 				GroupA::A(A {
 					params: AParams {
 						s: "node2".to_string(),
@@ -201,7 +201,7 @@ fn main() {
 		},
 		child: KeyedNodes::with_data(vec![
 			(
-				Key::U64(0),
+				key(0),
 				GroupA::Widget(Box::new(
 					WidgetData::<GroupAWidget>("foo bar2".to_string())
 				)),
