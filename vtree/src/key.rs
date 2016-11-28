@@ -7,6 +7,7 @@ use std::convert::{From, Into};
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Key {
 	U64(u64),
+	I64(i64),
 	String(Rc<String>),
 	Str(&'static str),
 	Bytes(Rc<Vec<u8>>),
@@ -15,6 +16,18 @@ pub enum Key {
 impl From<u64> for Key {
 	fn from(v: u64) -> Key {
 		Key::U64(v)
+	}
+}
+
+impl From<i64> for Key {
+	fn from(v: i64) -> Key {
+		Key::I64(v)
+	}
+}
+
+impl From<i32> for Key {
+	fn from(v: i32) -> Key {
+		Key::I64(v as i64)
 	}
 }
 
@@ -44,6 +57,7 @@ impl fmt::Display for Key {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			&Key::U64(ref n) => write!(f, "{}", n),
+			&Key::I64(ref n) => write!(f, "{}", n),
 			&Key::String(ref s) => write!(f, "{}", s),
 			&Key::Str(s) => write!(f, "{}", s),
 			&Key::Bytes(ref bytes) => {
