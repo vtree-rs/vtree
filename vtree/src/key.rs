@@ -138,11 +138,10 @@ impl<G> KeyedNodes<G> {
 	pub fn inplace_map<F>(&mut self, func: F)
 		where F: Fn(&Key, G) -> G,
 	{
-		let keys: Vec<_> = self.nodes.keys().cloned().collect();
-		for key in keys {
-			let node = self.nodes.remove(&key).unwrap();
-			let node = func(&key, node);
-			self.nodes.insert(key, node);
+		for key in self.ordered.iter() {
+			let node = self.nodes.remove(key).unwrap();
+			let node = func(key, node);
+			self.nodes.insert(key.clone(), node);
 		}
 	}
 
