@@ -221,8 +221,6 @@ fn generate_defs(nodes: Vec<Node>, group_name_to_node_names: HashMap<String, Vec
 				Widget(::std::boxed::Box<::vtree::widget::WidgetDataTrait<#name>>),
 				#(#vars,)*
 			}
-
-			impl ::vtree::group::Group for #name {}
 		}
 	});
 
