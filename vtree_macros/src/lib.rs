@@ -12,7 +12,7 @@ extern crate proc_macro_tokens;
 
 use syntax::parse::token::{Token, DelimToken};
 use syntax::ext::base::{ExtCtxt, ProcMacro};
-use syntax::symbol::keywords::{self, Keyword};
+use syntax::symbol::keywords::Keyword;
 use syntax::symbol::Symbol;
 use syntax::ast::Ident;
 use syntax_pos::Span;
@@ -70,7 +70,6 @@ enum NodeChildType {
 struct NodeChild {
 	name: String,
 	group: String,
-	is_public: bool,
 	child_type: NodeChildType,
 }
 
@@ -121,8 +120,6 @@ fn parse_nodes<'a>(ctx: &ExtCtxt, mut p: Parser<'a>)
 			}
 			let mut child_type = NodeChildType::Single;
 
-			let is_public = p.eat_keyword(keywords::Pub);
-
 			let field_name = try!(p.parse_ident()).name.to_string();
 			try!(p.expect(&Token::Colon));
 
@@ -137,7 +134,6 @@ fn parse_nodes<'a>(ctx: &ExtCtxt, mut p: Parser<'a>)
 			fields.push(NodeChild {
 				name: field_name,
 				group: field_type,
-				is_public: is_public,
 				child_type: child_type,
 			});
 
