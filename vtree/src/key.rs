@@ -13,23 +13,27 @@ pub enum Key {
 	Bytes(Rc<Vec<u8>>),
 }
 
-impl From<u64> for Key {
-	fn from(v: u64) -> Key {
-		Key::U64(v)
-	}
+macro_rules! impl_from_int_for_key {
+	($tyu:ty, $tyi:ty) => {
+		impl From<$tyu> for Key {
+			fn from(v: $tyu) -> Key {
+				Key::U64(v as u64)
+			}
+		}
+
+		impl From<$tyi> for Key {
+			fn from(v: $tyi) -> Key {
+				Key::I64(v as i64)
+			}
+		}
+	};
 }
 
-impl From<i64> for Key {
-	fn from(v: i64) -> Key {
-		Key::I64(v)
-	}
-}
-
-impl From<i32> for Key {
-	fn from(v: i32) -> Key {
-		Key::I64(v as i64)
-	}
-}
+impl_from_int_for_key!(u8, i8);
+impl_from_int_for_key!(u16, i16);
+impl_from_int_for_key!(u32, i32);
+impl_from_int_for_key!(u64, i64);
+impl_from_int_for_key!(usize, isize);
 
 impl From<String> for Key {
 	fn from(v: String) -> Key {
