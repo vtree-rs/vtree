@@ -38,24 +38,6 @@ impl Widget for GroupAWidget {
 	}
 }
 
-pub trait Differ {
-	fn diff_group_a<'a>(
-		&self,
-		path: &diff::Path,
-		curr: &GroupA,
-		diff: diff::Diff,
-	);
-
-	fn reorder_a_child(
-		&self,
-		path: &diff::Path,
-		index_curr: usize,
-		index_last: usize,
-	);
-
-	fn params_changed_a(&self, path: &diff::Path, curr: &A, last: &A);
-}
-
 struct MyDiffer;
 impl Differ for MyDiffer {
 	fn diff_group_a<'a>(

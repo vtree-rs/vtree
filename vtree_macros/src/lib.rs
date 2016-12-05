@@ -9,6 +9,7 @@ extern crate rustc_errors;
 #[macro_use]
 extern crate lazy_static;
 extern crate proc_macro_tokens;
+extern crate regex;
 
 use syntax::parse::token::{Token, DelimToken};
 use syntax::ext::base::{ExtCtxt, ProcMacro};
@@ -166,6 +167,22 @@ fn parse_nodes<'a>(ctx: &ExtCtxt, mut p: Parser<'a>)
 	Ok((nodes, group_name_to_node_names))
 }
 
+fn to_snake_case(s: &str) -> String {
+	use regex::{Regex, Captures};
+	lazy_static! {
+		static ref RE: Regex = Regex::new("([a-zA-Z]|^)([A-Z])").unwrap();
+	}
+	RE.replace_all(s, |caps: &Captures| {
+		let cap1 = caps.at(1).unwrap_or("");
+		let cap2 = caps.at(2).unwrap_or("").to_lowercase();
+		if cap1.len() != 0 {
+			format!("{}_{}", cap1, cap2)
+		} else {
+			cap2
+		}
+	})
+}
+
 fn to_ident(s: &str) -> quote::Ident {
 	use quote::Ident;
 	Ident::from(s)
@@ -224,10 +241,61 @@ fn generate_defs(nodes: Vec<Node>, group_name_to_node_names: HashMap<String, Vec
 		}
 	});
 
+	let differ_element_diff_groups = group_name_to_node_names.keys().map(|group| {
+		let name_diff_fn = quote::Ident::from(format!("diff_{}", to_snake_case(group)));
+		let name_group = to_ident(group);
+		quote!{
+			fn #name_diff_fn<'a>(
+				&self,
+				path: &::vtree::diff::Path,
+				curr: &#name_group,
+				diff: ::vtree::diff::Diff,
+			);
+		}
+	});
+	let differ_element_reorders = nodes.iter().flat_map(|node| {
+		let name_node_sc = to_snake_case(&node.name);
+		node.fields.iter().map(move |field| {
+			let name_fn = quote::Ident::from(format!("reorder_{}_{}",
+				name_node_sc,
+				to_snake_case(&field.name)
+			));
+			quote!{
+				fn #name_fn(
+					&self,
+					path: &::vtree::diff::Path,
+					index_curr: usize,
+					index_last: usize,
+				);
+			}
+		})
+	});
+	let differ_element_params_changed_nodes = nodes.iter()
+		.filter(|node| node.params_type.is_some())
+		.map(|node| {
+			let name_node = to_ident(&node.name);
+			let name_fn = quote::Ident::from(format!("params_changed_{}", to_snake_case(&node.name)));
+			quote!{
+				fn #name_fn(
+					&self,
+					path: &::vtree::diff::Path,
+					curr: &#name_node,
+					last: &#name_node,
+				);
+			}
+		});
+	let differ_elements = differ_element_diff_groups
+		.chain(differ_element_reorders)
+		.chain(differ_element_params_changed_nodes);
+
 	let defs = quote!{
 		#(#node_defs)*
 
 		#(#group_defs)*
+
+		pub trait Differ {
+			#(#differ_elements)*
+		}
 	};
 	println!("{}", defs);
 	lex(defs.as_str())
