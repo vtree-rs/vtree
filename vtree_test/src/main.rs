@@ -8,7 +8,7 @@ use vtree::widget::{Widget, WidgetData};
 use vtree::diff::{self, Diff};
 
 #[derive(Debug, Clone, PartialEq)]
-struct AParams {
+pub struct AParams {
 	s: String,
 }
 

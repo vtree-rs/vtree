@@ -1,31 +1,29 @@
-#![feature(plugin, plugin_registrar, rustc_private)]
-#![plugin(quasi_macros)]
-#![feature(slice_patterns)]
+#![feature(plugin_registrar, rustc_private)]
 
-extern crate quasi;
+#[macro_use]
+extern crate quote;
 extern crate syntax;
 extern crate syntax_pos;
-extern crate rustc;
 extern crate rustc_plugin;
 extern crate rustc_errors;
 #[macro_use]
 extern crate lazy_static;
-extern crate aster;
+extern crate proc_macro_tokens;
 
 use syntax::parse::token::{Token, DelimToken};
-use syntax::tokenstream::TokenTree;
-use syntax::ext::base::{ExtCtxt, MacEager, MacResult, DummyResult};
+use syntax::ext::base::{ExtCtxt, ProcMacro};
 use syntax::symbol::keywords::{self, Keyword};
 use syntax::symbol::Symbol;
-use syntax::ast::{Name, Ident, Ty};
-use syntax::ptr::P;
-use syntax::util::small_vector::SmallVector;
+use syntax::ast::Ident;
 use syntax_pos::Span;
 use rustc_plugin::Registry;
 use rustc_errors::DiagnosticBuilder;
 use syntax::parse::parser::Parser;
 use std::collections::HashMap;
-use aster::ident::ToIdent;
+use syntax::ext::base::SyntaxExtension;
+use syntax::tokenstream::TokenStream;
+use proc_macro_tokens::parse::lex;
+use syntax::ext::quote::rt::ToTokens;
 
 struct MyKeyword {
 	#[allow(dead_code)]
@@ -70,41 +68,43 @@ enum NodeChildType {
 
 #[derive(Debug)]
 struct NodeChild {
-	name: Name,
-	group: Name,
+	name: String,
+	group: String,
 	is_public: bool,
 	child_type: NodeChildType,
 }
 
 #[derive(Debug)]
 struct Node {
-	name: Name,
-	params_type: Option<P<Ty>>,
+	name: String,
+	params_type: Option<String>,
 	fields: Vec<NodeChild>,
 }
 
-fn parse_nodes<'a>(mut p: Parser<'a>)
-	-> Result<(Vec<Node>, HashMap<Name, Vec<Name>>), DiagnosticBuilder<'a>>
+fn parse_nodes<'a>(ctx: &ExtCtxt, mut p: Parser<'a>)
+	-> Result<(Vec<Node>, HashMap<String, Vec<String>>), DiagnosticBuilder<'a>>
 {
 	let mut nodes = Vec::<Node>::new();
-	let mut group_name_to_node_names = HashMap::<Name, Vec<Name>>::new();
+	let mut group_name_to_node_names = HashMap::<String, Vec<String>>::new();
 
 	loop {
-		let mut groups = Vec::<Name>::new();
+		let mut groups = Vec::<String>::new();
 		let mut fields = Vec::<NodeChild>::new();
 		let mut params_type = None;
 
-		let name = try!(p.parse_ident()).name;
+		let name = try!(p.parse_ident()).name.to_string();
 
 		if p.eat(&Token::Lt) {
-			params_type = Some(try!(p.parse_ty()));
+			let ty = try!(p.parse_ty());
+			let ts = TokenStream::from_tts(ty.to_tokens(ctx));
+			params_type = Some(ts.to_string());
 			try!(p.expect(&Token::Gt));
 		}
 
 		if p.eat(&Token::Colon) {
 			loop {
 				let group = try!(p.parse_ident());
-				groups.push(group.name);
+				groups.push(group.name.to_string());
 
 				if try!(comma_delimiter(&mut p, &Token::OpenDelim(DelimToken::Brace))) {
 					break;
@@ -123,7 +123,7 @@ fn parse_nodes<'a>(mut p: Parser<'a>)
 
 			let is_public = p.eat_keyword(keywords::Pub);
 
-			let field_name = try!(p.parse_ident()).name;
+			let field_name = try!(p.parse_ident()).name.to_string();
 			try!(p.expect(&Token::Colon));
 
 			if p.eat_keyword(*KW_OPT) {
@@ -132,7 +132,7 @@ fn parse_nodes<'a>(mut p: Parser<'a>)
 				child_type = NodeChildType::Multi;
 			}
 
-			let field_type = try!(p.parse_ident()).name;
+			let field_type = try!(p.parse_ident()).name.to_string();
 
 			fields.push(NodeChild {
 				name: field_name,
@@ -147,7 +147,7 @@ fn parse_nodes<'a>(mut p: Parser<'a>)
 		}
 
 		nodes.push(Node {
-			name: name,
+			name: name.clone(),
 			params_type: params_type,
 			fields: fields,
 		});
@@ -155,11 +155,11 @@ fn parse_nodes<'a>(mut p: Parser<'a>)
 		for group in groups {
 			{
 				if let Some(nodes) = group_name_to_node_names.get_mut(&group) {
-					nodes.push(name);
+					nodes.push(name.clone());
 					continue;
 				}
 			}
-			group_name_to_node_names.insert(group, vec![name]);
+			group_name_to_node_names.insert(group, vec![name.clone()]);
 		}
 
 		if try!(comma_delimiter(&mut p, &Token::Eof)) {
@@ -170,125 +170,89 @@ fn parse_nodes<'a>(mut p: Parser<'a>)
 	Ok((nodes, group_name_to_node_names))
 }
 
-fn define_nodes(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree])
-	-> Box<MacResult + 'static>
-{
-	let (nodes, mut group_name_to_node_names) = match parse_nodes(cx.new_parser_from_tts(args)) {
-		Ok(res) => res,
-		Err(mut e) => {
-			e.emit();
-			return DummyResult::any(sp);
-		},
-	};
+fn to_ident(s: &str) -> quote::Ident {
+	use quote::Ident;
+	Ident::from(s)
+}
 
-	let builder = aster::AstBuilder::new().span(sp);
-
-	let mut items = Vec::with_capacity(nodes.len() + group_name_to_node_names.len());
-
-	let items_nodes = nodes.iter().map(|node| {
-		let field_iter = node.fields.iter().map(|field| {
-			let mut f = builder.struct_field(field.name);
-			if field.is_public {
-				f = f.pub_();
-			}
-			let ty = f.ty();
-
+fn generate_defs(nodes: Vec<Node>, group_name_to_node_names: HashMap<String, Vec<String>>) -> TokenStream {
+	let node_defs = nodes.iter().map(|node| {
+		let fields = node.fields.iter().map(|field| {
+			let name = to_ident(&field.name);
+			let group = to_ident(&field.group);
 			match field.child_type {
-				NodeChildType::Single => ty.box_().id(field.group),
-				NodeChildType::Optional => ty.option().box_().id(field.group),
-				NodeChildType::Multi =>
-					ty
-						.path()
-							.global()
-							.id("vtree")
-							.id("key")
-							.segment("KeyedNodes")
-								.ty().id(field.group)
-							.build()
-						.build()
+				NodeChildType::Single => quote!{
+					pub #name: ::std::boxed::Box<#group>
+				},
+				NodeChildType::Optional => quote!{
+					pub #name: ::std::option::Option<::std::boxed::Box<#group>>
+				},
+				NodeChildType::Multi => quote!{
+					pub #name: ::vtree::key::KeyedNodes<#group>
+				},
 			}
 		});
 
-
-		let params_field = if let Some(ref ty) = node.params_type {
-			vec![
-				builder.struct_field("params").ty().build(ty.clone()),
-			]
-		} else {
-			vec![]
-		};
-
-		builder
-			.item()
-				.pub_()
-				.attr()
-					.list("derive")
-						.word("Debug")
-						.word("Clone")
-					.build()
-				.struct_(node.name)
-				.with_fields(params_field)
-				.with_fields(field_iter)
-			.build()
-	});
-	items.extend(items_nodes);
-
-	let items_groups = group_name_to_node_names.iter().map(|(group, nodes)| {
-		let var_iter = nodes.iter().map(|node| {
-			builder
-				.variant(node)
-					.tuple()
-						.ty()
-						.id(node)
-					.build()
+		let params_field = node.params_type.as_ref().map(|params| {
+			let params = to_ident(params);
+			quote!{
+				pub params: #params
+			}
 		});
 
-		builder
-			.item()
-				.pub_()
-				.attr()
-					.list("derive")
-						.word("Debug")
-						.word("Clone")
-					.build()
-				.enum_(group)
-				.variant("Widget")
-					.tuple()
-						.ty()
-						.box_()
-						.path()
-							.global()
-							.id("vtree")
-							.id("widget")
-							.segment("WidgetDataTrait")
-								.ty().id(group)
-							.build()
-						.build()
-					.build()
-				.with_variants(var_iter)
-			.build()
+		let name = to_ident(&node.name);
+		quote!{
+			#[derive(Debug, Clone)]
+			pub struct #name {
+				#params_field,
+				#(#fields,)*
+			}
+		}
 	});
-	items.extend(items_groups);
 
-	let items_group_trait_impl = group_name_to_node_names.iter().map(|(group, _)| {
-		builder
-			.item()
-				.impl_()
-				.trait_()
-					.global()
-					.id("vtree")
-					.id("group")
-					.segment("Group")
-					.build()
-				.build()
-				.ty().id(group)
+	let group_defs = group_name_to_node_names.iter().map(|(group, nodes)| {
+		let vars = nodes.iter().map(|node| {
+			let node = to_ident(node);
+			quote!{
+				#node(#node)
+			}
 		});
-	items.extend(items_group_trait_impl);
 
-	MacEager::items(SmallVector::many(items))
+		let name = to_ident(&group);
+		quote!{
+			#[derive(Debug, Clone)]
+			pub enum #name {
+				Widget(::std::boxed::Box<::vtree::widget::WidgetDataTrait<#name>>),
+				#(#vars,)*
+			}
+
+			impl ::vtree::group::Group for #name {}
+		}
+	});
+
+	let defs = quote!{
+		#(#node_defs)*
+
+		#(#group_defs)*
+	};
+	println!("{}", defs);
+	lex(defs.as_str())
+}
+
+struct MacroDefineNodes;
+impl ProcMacro for MacroDefineNodes
+{
+	fn expand<'ctx>(&self, ctx: &'ctx mut ExtCtxt, _span: Span, ts: TokenStream) -> TokenStream {
+		let tts = ts.to_tts();
+		let (nodes, group_name_to_node_names) = parse_nodes(ctx, ctx.new_parser_from_tts(&tts)).unwrap();
+		generate_defs(nodes, group_name_to_node_names)
+	}
 }
 
 #[plugin_registrar]
 pub fn plugin_registrar(reg: &mut Registry) {
-	reg.register_macro("define_nodes", define_nodes);
+	reg.register_syntax_extension(
+		Symbol::intern("define_nodes"),
+		SyntaxExtension::ProcMacro(Box::new(MacroDefineNodes))
+	);
 }

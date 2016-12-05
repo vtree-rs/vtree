@@ -3,10 +3,8 @@ name = "vtree_macros"
 version = "0.0.0"
 
 [dependencies]
-aster = "0.36"
 lazy_static = "0.2"
-quasi = "0.28"
-quasi_macros = "0.28"
+quote = "0.3"
 
 [lib]
 crate-type = ["dylib"]
