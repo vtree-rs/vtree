@@ -3,6 +3,7 @@ use syntax::tokenstream::TokenStream;
 use proc_macro_tokens::parse::lex;
 use regex::{Regex, Captures};
 use quote::Ident;
+use quote::Tokens;
 use NodeChildType;
 use Node;
 
@@ -25,8 +26,8 @@ fn to_ident(s: &str) -> Ident {
 	Ident::from(s)
 }
 
-pub fn generate_defs(nodes: Vec<Node>, group_name_to_node_names: HashMap<String, Vec<String>>) -> TokenStream {
-	let node_defs = nodes.iter().map(|node| {
+fn gen_node_defs<'a>(nodes: &'a Vec<Node>, _group_name_to_node_names: &'a HashMap<String, Vec<String>>) -> impl Iterator<Item=Tokens> + 'a {
+	nodes.iter().map(|node| {
 		let fields = node.fields.iter().map(|field| {
 			let name = to_ident(&field.name);
 			let group = to_ident(&field.group);
@@ -58,9 +59,11 @@ pub fn generate_defs(nodes: Vec<Node>, group_name_to_node_names: HashMap<String,
 				#(#fields,)*
 			}
 		}
-	});
+	})
+}
 
-	let group_defs = group_name_to_node_names.iter().map(|(group, nodes)| {
+fn gen_group_defs<'a>(_nodes: &'a Vec<Node>, group_name_to_node_names: &'a HashMap<String, Vec<String>>) -> impl Iterator<Item=Tokens> + 'a {
+	group_name_to_node_names.iter().map(|(group, nodes)| {
 		let vars = nodes.iter().map(|node| {
 			let node = to_ident(node);
 			quote!{
@@ -76,8 +79,10 @@ pub fn generate_defs(nodes: Vec<Node>, group_name_to_node_names: HashMap<String,
 				#(#vars,)*
 			}
 		}
-	});
+	})
+}
 
+fn gen_differ_def(nodes: &Vec<Node>, group_name_to_node_names: &HashMap<String, Vec<String>>) -> Tokens {
 	let differ_element_diff_groups = group_name_to_node_names.keys().map(|group| {
 		let name_diff_fn = Ident::from(format!("diff_{}", to_snake_case(group)));
 		let name_group = to_ident(group);
@@ -125,14 +130,22 @@ pub fn generate_defs(nodes: Vec<Node>, group_name_to_node_names: HashMap<String,
 		.chain(differ_element_reorders)
 		.chain(differ_element_params_changed_nodes);
 
-	let defs = quote!{
-		#(#node_defs)*
-
-		#(#group_defs)*
-
+	quote!{
 		pub trait Differ {
 			#(#differ_elements)*
 		}
+	}
+}
+
+pub fn generate_defs(nodes: Vec<Node>, group_name_to_node_names: HashMap<String, Vec<String>>) -> TokenStream {
+	let node_defs = gen_node_defs(&nodes, &group_name_to_node_names);
+	let group_defs = gen_group_defs(&nodes, &group_name_to_node_names);
+	let differ_def = gen_differ_def(&nodes, &group_name_to_node_names);
+
+	let defs = quote!{
+		#(#node_defs)*
+		#(#group_defs)*
+		#differ_def
 	};
 	println!("{}", defs);
 	lex(defs.as_str())

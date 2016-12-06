@@ -1,4 +1,5 @@
 #![feature(plugin_registrar, rustc_private)]
+#![feature(conservative_impl_trait)]
 
 #[macro_use]
 extern crate quote;
