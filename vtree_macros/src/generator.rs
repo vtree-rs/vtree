@@ -82,7 +82,7 @@ fn gen_group_defs<'a>(pd: &'a ParsedData) -> impl Iterator<Item=Tokens> + 'a {
 }
 
 fn gen_differ_def(pd: &ParsedData) -> Tokens {
-	let differ_element_diff_groups = pd.group_name_to_node_names.keys().map(|group| {
+	let diff_groups = pd.group_name_to_node_names.keys().map(|group| {
 		let name_diff_fn = Ident::from(format!("diff_{}", to_snake_case(group)));
 		let name_group = to_ident(group);
 		quote!{
@@ -94,7 +94,7 @@ fn gen_differ_def(pd: &ParsedData) -> Tokens {
 			);
 		}
 	});
-	let differ_element_reorders = pd.nodes.iter().flat_map(|node| {
+	let reorders = pd.nodes.iter().flat_map(|node| {
 		let name_node_sc = to_snake_case(&node.name);
 		node.fields.iter().map(move |field| {
 			let name_fn = Ident::from(format!("reorder_{}_{}",
@@ -111,7 +111,7 @@ fn gen_differ_def(pd: &ParsedData) -> Tokens {
 			}
 		})
 	});
-	let differ_element_params_changed_nodes = pd.nodes.iter()
+	let params_changes = pd.nodes.iter()
 		.filter(|node| node.params_type.is_some())
 		.map(|node| {
 			let name_node = to_ident(&node.name);
@@ -125,13 +125,12 @@ fn gen_differ_def(pd: &ParsedData) -> Tokens {
 				);
 			}
 		});
-	let differ_elements = differ_element_diff_groups
-		.chain(differ_element_reorders)
-		.chain(differ_element_params_changed_nodes);
 
 	quote!{
 		pub trait Differ {
-			#(#differ_elements)*
+			#(#diff_groups)*
+			#(#reorders)*
+			#(#params_changes)*
 		}
 	}
 }
@@ -140,7 +139,6 @@ pub fn generate_defs(pd: ParsedData) -> TokenStream {
 	let node_defs = gen_node_defs(&pd);
 	let group_defs = gen_group_defs(&pd);
 	let differ_def = gen_differ_def(&pd);
-
 	let defs = quote!{
 		#(#node_defs)*
 		#(#group_defs)*
