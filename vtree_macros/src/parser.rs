@@ -11,6 +11,7 @@ use syntax::ext::quote::rt::ToTokens;
 use NodeChildType;
 use Node;
 use NodeChild;
+use ParsedData;
 
 struct MyKeyword {
 	#[allow(dead_code)]
@@ -48,7 +49,7 @@ fn comma_delimiter<'a>(p: &mut Parser<'a>, t: &Token)
 
 
 pub fn parse_nodes<'a>(ctx: &ExtCtxt, mut p: Parser<'a>)
-	-> Result<(Vec<Node>, HashMap<String, Vec<String>>), DiagnosticBuilder<'a>>
+	-> Result<ParsedData, DiagnosticBuilder<'a>>
 {
 	let mut nodes = Vec::<Node>::new();
 	let mut group_name_to_node_names = HashMap::<String, Vec<String>>::new();
@@ -130,5 +131,8 @@ pub fn parse_nodes<'a>(ctx: &ExtCtxt, mut p: Parser<'a>)
 		}
 	}
 
-	Ok((nodes, group_name_to_node_names))
+	Ok(ParsedData {
+		nodes: nodes,
+		group_name_to_node_names: group_name_to_node_names,
+	})
 }

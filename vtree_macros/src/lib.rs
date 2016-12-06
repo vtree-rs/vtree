@@ -24,6 +24,7 @@ use syntax_pos::Span;
 use rustc_plugin::Registry;
 use syntax::ext::base::SyntaxExtension;
 use syntax::tokenstream::TokenStream;
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub enum NodeChildType {
@@ -46,13 +47,19 @@ pub struct Node {
 	fields: Vec<NodeChild>,
 }
 
+#[derive(Debug)]
+pub struct ParsedData {
+	nodes: Vec<Node>,
+	group_name_to_node_names: HashMap<String, Vec<String>>,
+}
+
 struct MacroDefineNodes;
 impl ProcMacro for MacroDefineNodes
 {
 	fn expand<'ctx>(&self, ctx: &'ctx mut ExtCtxt, _span: Span, ts: TokenStream) -> TokenStream {
 		let tts = ts.to_tts();
-		let (nodes, group_name_to_node_names) = parse_nodes(ctx, ctx.new_parser_from_tts(&tts)).unwrap();
-		generate_defs(nodes, group_name_to_node_names)
+		let pd = parse_nodes(ctx, ctx.new_parser_from_tts(&tts)).unwrap();
+		generate_defs(pd)
 	}
 }
 
