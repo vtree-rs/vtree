@@ -77,42 +77,6 @@ impl <D: Differ> Context<D> {
 }
 
 impl GroupA {
-	pub fn expand_widgets(self, last: Option<&GroupA>, path: &diff::Path) -> GroupA {
-		let mut curr = if let GroupA::Widget(widget_data) = self {
-			match widget_data.render() {
-				Some(result) => result,
-				None => {
-					let last = last.unwrap();
-					if let &GroupA::Widget(..) = last {
-						panic!("Widgets not allowed in last in `{}`", path);
-					}
-					return last.clone();
-				}
-			}
-		} else {
-			self
-		};
-
-		match curr {
-			GroupA::A(ref mut curr_node) => {
-				if let Some(&GroupA::A(ref last_node)) = last {
-					let path_field = path.add_node_field("child");
-					curr_node.child.inplace_map(|key, node| {
-						node.expand_widgets(last_node.child.get_by_key(key), &path_field.add_key(key.clone()))
-					});
-				} else {
-					let path_field = path.add_node_field("child");
-					curr_node.child.inplace_map(|key, node| {
-						node.expand_widgets(None, &path_field.add_key(key.clone()))
-					});
-				}
-			},
-			GroupA::Widget(_) => unreachable!(),
-		}
-
-		curr
-	}
-
 	pub fn diff<'a, D: Differ>(
 		&self,
 		path: &diff::Path,
