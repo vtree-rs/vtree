@@ -76,46 +76,6 @@ impl <D: Differ> Context<D> {
 	}
 }
 
-impl GroupA {
-	pub fn diff<'a, D: Differ>(
-		&self,
-		path: &diff::Path,
-		last: &GroupA,
-		ctx: &Context<D>,
-	) {
-		match self {
-			&GroupA::A(ref curr_node) => {
-				if let &GroupA::A(ref last_node) = last {
-					if curr_node.params != last_node.params {
-						ctx.differ.params_changed_a(path, curr_node, &last_node);
-					}
-					let curr_path = path.add_node_field("child");
-					for diff in curr_node.child.diff(&last_node.child) {
-						match diff {
-							KeyedDiff::Added(key, index, node) => {
-								ctx.differ.diff_group_a(&curr_path.add_key(key.clone()), &node, Diff::Added);
-							},
-							KeyedDiff::Removed(key, index, node) => {
-								ctx.differ.diff_group_a(&curr_path.add_key(key.clone()), &node, Diff::Removed);
-							},
-							KeyedDiff::Unchanged(key, index, curr_child, last_child) => {
-								curr_child.diff(&curr_path.add_key(key.clone()), last_child, ctx);
-							},
-							KeyedDiff::Reordered(i_cur, i_last) => {
-								ctx.differ.reorder_a_child(path, i_cur, i_last);
-							},
-						}
-					}
-				} else {
-					// TODO: call node removed hook
-					ctx.differ.diff_group_a(path, &self, Diff::Replaced);
-				}
-			},
-			&GroupA::Widget(_) => unreachable!(),
-		}
-	}
-}
-
 fn main() {
 	let test_a = GroupA::A(A {
 		params: AParams {

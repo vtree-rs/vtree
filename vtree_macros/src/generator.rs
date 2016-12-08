@@ -136,7 +136,7 @@ fn gen_differ_def(pd: &ParsedData) -> Tokens {
 	}
 }
 
-fn gen_group_impl_expand_widgets(pd: &ParsedData, group: &str, nodes: &[&Node]) -> Tokens {
+fn gen_group_impl_expand_widgets(group: &str, nodes: &[&Node]) -> Tokens {
 	let group_name = to_ident(group);
 	let variants = nodes.iter().map(|node| {
 		let node_name = to_ident(&node.name);
@@ -202,8 +202,69 @@ fn gen_group_impl_expand_widgets(pd: &ParsedData, group: &str, nodes: &[&Node]) 
 	}
 }
 
-fn gen_group_impl_diff(pd: &ParsedData, group: &str, nodes: &[&Node]) -> Tokens {
+fn gen_group_impl_diff(group: &str, nodes: &[&Node]) -> Tokens {
+	let group_name = to_ident(group);
+	let diff_group = Ident::from(format!("diff_{}", to_snake_case(group)));
+
+	let variants = nodes.iter().map(|node| {
+		// TODO: handle single & optional fields
+		let fields = node.fields.iter().map(|field| {
+			let name_field_str = &field.name;
+			let name_field = to_ident(&field.name);
+			let reorder_children = Ident::from(format!("reorder_{}_{}",
+				to_snake_case(&node.name),
+				to_snake_case(&field.name),
+			));
+			quote!{
+				let curr_path = path.add_node_field(#name_field_str);
+				for diff in curr_node.#name_field.diff(&last_node.#name_field) {
+					match diff {
+						KeyedDiff::Added(key, _index, node) => {
+							ctx.differ.#diff_group(&curr_path.add_key(key.clone()), &node, Diff::Added);
+						},
+						KeyedDiff::Removed(key, _index, node) => {
+							ctx.differ.#diff_group(&curr_path.add_key(key.clone()), &node, Diff::Removed);
+						},
+						KeyedDiff::Unchanged(key, _index, curr_child, last_child) => {
+							curr_child.diff(&curr_path.add_key(key.clone()), last_child, ctx);
+						},
+						KeyedDiff::Reordered(i_cur, i_last) => {
+							ctx.differ.#reorder_children(path, i_cur, i_last);
+						},
+					}
+				}
+			}
+		});
+
+		let node_name = to_ident(&node.name);
+		let params_changed = Ident::from(format!("params_changed_{}", to_snake_case(&node.name)));
+		quote!{
+			&#group_name::#node_name(ref curr_node) => {
+				if let &#group_name::#node_name(ref last_node) = last {
+					if curr_node.params != last_node.params {
+						ctx.differ.#params_changed(path, curr_node, &last_node);
+					}
+					#(#fields)*
+				} else {
+					// TODO: call node removed hook
+					ctx.differ.#diff_group(path, &self, Diff::Replaced);
+				}
+			},
+		}
+	});
+
 	quote!{
+		pub fn diff<D: Differ>(
+			&self,
+			path: &diff::Path,
+			last: &#group_name,
+			ctx: &Context<D>,
+		) {
+			match self {
+				#(#variants)*
+				&#group_name::Widget(_) => unreachable!(),
+			}
+		}
 	}
 }
 
@@ -214,8 +275,8 @@ fn gen_group_impls<'a>(pd: &'a ParsedData) -> impl Iterator<Item=Tokens> + 'a {
 				pd.nodes.iter().find(|n| &n.name == name)
 			})
 			.collect();
-		let expand_widgets = gen_group_impl_expand_widgets(&pd, group, &nodes[..]);
-		let diff = gen_group_impl_diff(&pd, group, &nodes[..]);
+		let expand_widgets = gen_group_impl_expand_widgets(group, &nodes[..]);
+		let diff = gen_group_impl_diff(group, &nodes[..]);
 		let name = to_ident(group);
 		quote!{
 			impl #name {
