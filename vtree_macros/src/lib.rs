@@ -28,45 +28,42 @@ use std::collections::HashMap;
 
 #[derive(Debug)]
 pub enum NodeChildType {
-	Single,
-	Optional,
-	Multi,
+    Single,
+    Optional,
+    Multi,
 }
 
 #[derive(Debug)]
 pub struct NodeChild {
-	name: String,
-	group: String,
-	child_type: NodeChildType,
+    name: String,
+    group: String,
+    child_type: NodeChildType,
 }
 
 #[derive(Debug)]
 pub struct Node {
-	name: String,
-	params_type: Option<String>,
-	fields: Vec<NodeChild>,
+    name: String,
+    params_type: Option<String>,
+    fields: Vec<NodeChild>,
 }
 
 #[derive(Debug)]
 pub struct ParsedData {
-	nodes: Vec<Node>,
-	group_name_to_node_names: HashMap<String, Vec<String>>,
+    nodes: Vec<Node>,
+    group_name_to_node_names: HashMap<String, Vec<String>>,
 }
 
 struct MacroDefineNodes;
-impl ProcMacro for MacroDefineNodes
-{
-	fn expand<'ctx>(&self, ctx: &'ctx mut ExtCtxt, _span: Span, ts: TokenStream) -> TokenStream {
-		let tts = ts.to_tts();
-		let pd = parse_nodes(ctx, ctx.new_parser_from_tts(&tts)).unwrap();
-		generate_defs(pd)
-	}
+impl ProcMacro for MacroDefineNodes {
+    fn expand<'ctx>(&self, ctx: &'ctx mut ExtCtxt, _span: Span, ts: TokenStream) -> TokenStream {
+        let tts = ts.to_tts();
+        let pd = parse_nodes(ctx, ctx.new_parser_from_tts(&tts)).unwrap();
+        generate_defs(pd)
+    }
 }
 
 #[plugin_registrar]
 pub fn plugin_registrar(reg: &mut Registry) {
-	reg.register_syntax_extension(
-		Symbol::intern("define_nodes"),
-		SyntaxExtension::ProcMacro(Box::new(MacroDefineNodes))
-	);
+    reg.register_syntax_extension(Symbol::intern("define_nodes"),
+                                  SyntaxExtension::ProcMacro(Box::new(MacroDefineNodes)));
 }
