@@ -9,7 +9,7 @@ use Node;
 
 fn to_snake_case(s: &str) -> String {
 	lazy_static! {
-		static ref RE: Regex = Regex::new("([a-zA-Z]|^)([A-Z])").unwrap();
+		static ref RE: Regex = Regex::new("([a-z]|^)([A-Z])").unwrap();
 	}
 	RE.replace_all(s, |caps: &Captures| {
 		let cap1 = caps.at(1).unwrap_or("");
@@ -87,7 +87,7 @@ fn gen_differ_def(pd: &ParsedData) -> Tokens {
 		let name_diff_fn = Ident::from(format!("diff_{}", to_snake_case(group)));
 		let name_group = to_ident(group);
 		quote!{
-			fn #name_diff_fn<'a>(
+			fn #name_diff_fn(
 				&self,
 				path: &::vtree::diff::Path,
 				curr: &#name_group,
@@ -143,43 +143,105 @@ fn gen_group_impl_expand_widgets(group: &str, nodes: &[&Node]) -> Tokens {
 	let variants = nodes.iter().map(|node| {
 		let node_name = to_ident(&node.name);
 
-		// TODO: handle single & optional fields
 		let fields_then = node.fields.iter().map(|field| {
 			let name_field_str = &field.name;
 			let name_field = to_ident(&field.name);
-			quote!{
-				let path_field = path.add_node_field(#name_field_str);
-				curr_node.#name_field.inplace_map(|key, node| {
-					node.expand_widgets(last_node.#name_field.get_by_key(key), &path_field.add_key(key.clone()))
-				});
+			let field_name_local = Ident::from(format!("child_{}", field.name));
+			match field.child_type {
+				NodeChildType::Single => {
+					quote!{
+						let path_field = path.add_node_field(#name_field_str);
+						#field_name_local = #field_name_local.expand_widgets(last_node.#name_field, &path_field);
+					}
+				},
+				NodeChildType::Optional => {
+					quote!{
+						let path_field = path.add_node_field(#name_field_str);
+						#field_name_local = if let Some(field) = #field_name_local {
+							field.expand_widgets(last_node.#name_field, &path_field);
+						};
+					}
+				},
+				NodeChildType::Multi => {
+					quote!{
+						let path_field = path.add_node_field(#name_field_str);
+						#field_name_local.inplace_map(|key, node| {
+							node.expand_widgets(last_node.#name_field.get_by_key(key), &path_field.add_key(key.clone()))
+						});
+					}
+				},
 			}
 		});
 
 		let fields_else = node.fields.iter().map(|field| {
 			let name_field_str = &field.name;
-			let name_field = to_ident(&field.name);
-			quote!{
-				let path_field = path.add_node_field(#name_field_str);
-				curr_node.#name_field.inplace_map(|key, node| {
-					node.expand_widgets(None, &path_field.add_key(key.clone()))
-				});
+			let field_name_local = Ident::from(format!("child_{}", field.name));
+			match field.child_type {
+				NodeChildType::Single => {
+					quote!{
+						let path_field = path.add_node_field(#name_field_str);
+						#field_name_local = #field_name_local.expand_widgets(None, &path_field);
+					}
+				},
+				NodeChildType::Optional => {
+					quote!{
+						let path_field = path.add_node_field(#name_field_str);
+						#field_name_local = if let Some(field) = #field_name_local {
+							field.expand_widgets(None, &path_field);
+						};
+					}
+				},
+				NodeChildType::Multi => {
+					quote!{
+						let path_field = path.add_node_field(#name_field_str);
+						#field_name_local.inplace_map(|key, node| {
+							node.expand_widgets(None, &path_field.add_key(key.clone()))
+						});
+					}
+				},
 			}
 		});
 
+		let destruct_fields = node.fields.iter().map(|field| {
+			let field_name = to_ident(&field.name);
+			let field_name_local = Ident::from(format!("child_{}", field.name));
+			quote!{
+				#field_name: mut #field_name_local
+			}
+		});
+		let construct_fields = node.fields.iter().map(|field| {
+			let field_name = to_ident(&field.name);
+			let field_name_local = Ident::from(format!("child_{}", field.name));
+			quote!{
+				#field_name: #field_name_local
+			}
+		});
+		let de_con_struct_params = if node.params_type.is_some() {
+			Some(quote!{
+				params: curr_params,
+			})
+		} else {
+			None
+		};
+
 		quote!{
-			#group_name::#node_name(ref mut curr_node) => {
+			#group_name::#node_name(#node_name{#(#destruct_fields,)* #de_con_struct_params}) => {
 				if let Some(&#group_name::#node_name(ref last_node)) = last {
 					#(#fields_then)*
 				} else {
 					#(#fields_else)*
 				}
+				#group_name::#node_name(#node_name{
+					#(#construct_fields,)*
+					#de_con_struct_params
+				})
 			},
 		}
 	});
 
 	quote!{
 		pub fn expand_widgets(self, last: Option<&#group_name>, path: &diff::Path) -> #group_name {
-			let mut curr = if let #group_name::Widget(widget_data) = self {
+			let curr = if let #group_name::Widget(widget_data) = self {
 				match widget_data.render() {
 					Some(result) => result,
 					None => {
@@ -198,8 +260,6 @@ fn gen_group_impl_expand_widgets(group: &str, nodes: &[&Node]) -> Tokens {
 				#(#variants)*
 				#group_name::Widget(_) => unreachable!(),
 			}
-
-			curr
 		}
 	}
 }
@@ -217,24 +277,52 @@ fn gen_group_impl_diff(group: &str, nodes: &[&Node]) -> Tokens {
 				to_snake_case(&node.name),
 				to_snake_case(&field.name),
 			));
-			quote!{
-				let curr_path = path.add_node_field(#name_field_str);
-				for diff in curr_node.#name_field.diff(&last_node.#name_field) {
-					match diff {
-						KeyedDiff::Added(key, _index, node) => {
-							ctx.differ.#diff_group(&curr_path.add_key(key.clone()), &node, Diff::Added);
-						},
-						KeyedDiff::Removed(key, _index, node) => {
-							ctx.differ.#diff_group(&curr_path.add_key(key.clone()), &node, Diff::Removed);
-						},
-						KeyedDiff::Unchanged(key, _index, curr_child, last_child) => {
-							curr_child.diff(&curr_path.add_key(key.clone()), last_child, ctx);
-						},
-						KeyedDiff::Reordered(i_cur, i_last) => {
-							ctx.differ.#reorder_children(path, &curr_node, i_cur, i_last);
-						},
+
+			match field.child_type {
+				NodeChildType::Single => {
+					quote!{
+						let curr_path = path.add_node_field(#name_field_str);
+						curr_node.#name_field.diff(&curr_path.add_key(key.clone()), last_node.#name_field, ctx);
 					}
-				}
+				},
+				NodeChildType::Optional => {
+					let diff_group_child = Ident::from(format!("diff_{}", to_snake_case(&field.group)));
+					quote!{
+						let curr_path = path.add_node_field(#name_field_str);
+						if let Some(curr_child) = curr_node.#name_field {
+							if let Some(last_child) = last_node.#name_field {
+								curr_child.diff(&curr_path, last_child, ctx);
+							} else {
+								ctx.differ.#diff_group_child(&curr_path, &curr_child, Diff::Added);
+							}
+						} else {
+							if let Some(last_child) = last_node.#name_field {
+								ctx.differ.#diff_group_child(&curr_path, &last_child, Diff::Removed);
+							}
+						}
+					}
+				},
+				NodeChildType::Multi => {
+					quote!{
+						let curr_path = path.add_node_field(#name_field_str);
+						for diff in curr_node.#name_field.diff(&last_node.#name_field) {
+							match diff {
+								KeyedDiff::Added(key, _index, node) => {
+									ctx.differ.#diff_group(&curr_path.add_key(key.clone()), &node, Diff::Added);
+								},
+								KeyedDiff::Removed(key, _index, node) => {
+									ctx.differ.#diff_group(&curr_path.add_key(key.clone()), &node, Diff::Removed);
+								},
+								KeyedDiff::Unchanged(key, _index, curr_child, last_child) => {
+									curr_child.diff(&curr_path.add_key(key.clone()), last_child, ctx);
+								},
+								KeyedDiff::Reordered(i_cur, i_last) => {
+									ctx.differ.#reorder_children(path, &curr_node, i_cur, i_last);
+								},
+							}
+						}
+					}
+				},
 			}
 		});
 
