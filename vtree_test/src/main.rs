@@ -52,6 +52,7 @@ impl Differ for MyDiffer {
 	fn reorder_a_child(
 		&self,
 		path: &diff::Path,
+		parent: &A,
 		index_curr: usize,
 		index_last: usize,
 	) {

@@ -96,6 +96,7 @@ fn gen_differ_def(pd: &ParsedData) -> Tokens {
 		}
 	});
 	let reorders = pd.nodes.iter().flat_map(|node| {
+		let name_node = to_ident(&node.name);
 		let name_node_sc = to_snake_case(&node.name);
 		node.fields.iter().map(move |field| {
 			let name_fn = Ident::from(format!("reorder_{}_{}",
@@ -106,6 +107,7 @@ fn gen_differ_def(pd: &ParsedData) -> Tokens {
 				fn #name_fn(
 					&self,
 					path: &::vtree::diff::Path,
+					parent: &#name_node,
 					index_curr: usize,
 					index_last: usize,
 				);
@@ -229,7 +231,7 @@ fn gen_group_impl_diff(group: &str, nodes: &[&Node]) -> Tokens {
 							curr_child.diff(&curr_path.add_key(key.clone()), last_child, ctx);
 						},
 						KeyedDiff::Reordered(i_cur, i_last) => {
-							ctx.differ.#reorder_children(path, i_cur, i_last);
+							ctx.differ.#reorder_children(path, &curr_node, i_cur, i_last);
 						},
 					}
 				}
