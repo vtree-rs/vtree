@@ -381,16 +381,106 @@ fn gen_group_impls<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Tokens> + 'a 
     })
 }
 
+fn gen_node_constructor_fns<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Tokens> + 'a {
+    pd.nodes.iter().map(|node| {
+        let node_name = to_ident(&node.name);
+        let node_name_sc = Ident::from(to_snake_case(&node.name));
+
+        let maybe_params_arg = node.params_type.as_ref().map(|params_type| {
+            let params_type_name = to_ident(params_type);
+            quote!{
+                params: #params_type_name,
+            }
+        });
+        let field_args = node.fields.iter().map(|field| {
+            let field_name_local = Ident::from(format!("child_{}", field.name));
+            let group_name = to_ident(&field.group);
+            match field.child_type {
+                NodeChildType::Single => {
+                    quote!{
+                        #field_name_local: #group_name,
+                    }
+                },
+                NodeChildType::Optional => {
+                    quote!{
+                        #field_name_local: ::std::option::Option<#group_name>,
+                    }
+                },
+                NodeChildType::Multi => {
+                    quote!{
+                        #field_name_local: ::vtree::key::KeyedNodes<#group_name>,
+                    }
+                },
+            }
+
+        });
+
+        let maybe_params_constr = node.params_type.as_ref().map(|_params_type| {
+            quote!{
+                params: params,
+            }
+        });
+        let field_constrs = node.fields.iter().map(|field| {
+            let field_name_local = Ident::from(format!("child_{}", field.name));
+            let field_name = to_ident(&field.name);
+            quote!{
+                #field_name: #field_name_local,
+            }
+        });
+
+        quote!{
+            pub fn #node_name_sc<T>(#maybe_params_arg #(#field_args)*) -> T
+                where T: ::std::convert::From<#node_name>
+            {
+                ::std::convert::From::from(#node_name {
+                    #maybe_params_constr
+                    #(#field_constrs)*
+                })
+            }
+        }
+    })
+}
+
+fn gen_group_from_node_impls<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Tokens> + 'a {
+    use std::iter::once;
+    pd.group_name_to_node_names.iter().flat_map(|(group, nodes)| {
+        let group_name = to_ident(group);
+        once(quote!{
+            impl <WD> ::std::convert::From<WD> for #group_name
+                where WD: ::vtree::widget::WidgetDataTrait<#group_name> + 'static
+            {
+                fn from(widget_data: WD) -> #group_name {
+                    #group_name::Widget(Box::new(widget_data))
+                }
+            }
+        })
+        .chain(nodes.iter().map(move |node| {
+            let node_name = to_ident(node);
+            quote!{
+                impl ::std::convert::From<#node_name> for #group_name {
+                    fn from(node: #node_name) -> #group_name {
+                        #group_name::#node_name(node)
+                    }
+                }
+            }
+        }))
+    })
+}
+
 pub fn generate_defs(pd: ParsedData) -> TokenStream {
     let node_defs = gen_node_defs(&pd);
     let group_defs = gen_group_defs(&pd);
     let differ_def = gen_differ_def(&pd);
     let group_impls = gen_group_impls(&pd);
+    let node_constructor_fns = gen_node_constructor_fns(&pd);
+    let group_from_node_impls = gen_group_from_node_impls(&pd);
     let defs = quote!{
         #(#node_defs)*
         #(#group_defs)*
         #(#group_impls)*
         #differ_def
+        #(#node_constructor_fns)*
+        #(#group_from_node_impls)*
     };
     println!("{}", defs);
     lex(defs.as_str())

@@ -29,10 +29,7 @@ impl Widget for GroupAWidget {
     }
 
     fn render(&self, i: Self::Input) -> Option<Self::Output> {
-        Some(GroupA::A(A {
-            child: KeyedNodes::new(),
-            params: AParams { s: i },
-        }))
+        Some(a(AParams { s: i }, KeyedNodes::new()))
     }
 }
 
@@ -67,39 +64,35 @@ impl<D: Differ> Context<D> {
 }
 
 fn main() {
-    let test_a = GroupA::A(A {
-        params: AParams { s: "node1".to_string() },
-        child: KeyedNodes::with_data(vec![
+    let test_a: GroupA = a(
+        AParams { s: "node1".to_string() },
+        KeyedNodes::with_data(vec![
             (
                 key(0),
-                GroupA::Widget(Box::new(
-                    WidgetData::<GroupAWidget>("foo bar".to_string())
-                )),
+                WidgetData::<GroupAWidget>("foo bar".to_string()).into()
             ),
 
             (
                 key(1),
-                GroupA::A(A {
-                    params: AParams {
+                a(
+                    AParams {
                         s: "node2".to_string(),
                     },
-                    child: KeyedNodes::new(),
-                }),
+                    KeyedNodes::new()
+                )
             ),
         ]),
-    });
+    );
 
-    let test_b = GroupA::A(A {
-        params: AParams { s: "node2".to_string() },
-        child: KeyedNodes::with_data(vec![
+    let test_b: GroupA = a(
+        AParams { s: "node2".to_string() },
+        KeyedNodes::with_data(vec![
             (
                 key(0),
-                GroupA::Widget(Box::new(
-                    WidgetData::<GroupAWidget>("foo bar2".to_string())
-                )),
+                WidgetData::<GroupAWidget>("foo bar2".to_string()).into()
             ),
         ]),
-    });
+    );
 
     let ctx = Context::new(MyDiffer);
     let path = diff::Path::new();
