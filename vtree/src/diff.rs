@@ -65,3 +65,15 @@ pub enum Diff {
     Added,
     Removed,
 }
+
+#[derive(Debug)]
+pub struct Context<D> {
+    // pub widgets: HashMap<diff::Path, Box<WidgetDataTrait<G>>>,
+    pub differ: D,
+}
+
+impl<D> Context<D> {
+    pub fn new(differ: D) -> Context<D> {
+        Context { differ: differ }
+    }
+}

@@ -245,7 +245,7 @@ fn gen_group_impl_expand_widgets(group: &str, nodes: &[&Node]) -> Tokens {
     });
 
     quote!{
-        pub fn expand_widgets(self, last: Option<&#group_name>, path: &diff::Path) -> #group_name {
+        pub fn expand_widgets(self, last: Option<&#group_name>, path: &::vtree::diff::Path) -> #group_name {
             let curr = if let #group_name::Widget(widget_data) = self {
                 match widget_data.render() {
                     Some(result) => result,
@@ -352,10 +352,13 @@ fn gen_group_impl_diff(group: &str, nodes: &[&Node]) -> Tokens {
     quote!{
         pub fn diff<D: Differ>(
             &self,
-            path: &diff::Path,
+            path: &::vtree::diff::Path,
             last: &#group_name,
-            ctx: &Context<D>,
+            ctx: &::vtree::diff::Context<D>,
         ) {
+            use ::vtree::diff::Diff;
+            use ::vtree::key::KeyedDiff;
+
             match self {
                 #(#variants)*
                 &#group_name::Widget(_) => unreachable!(),

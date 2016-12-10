@@ -5,7 +5,7 @@ extern crate vtree;
 
 use vtree::key::{Key, key, KeyedDiff, KeyedNodes};
 use vtree::widget::{Widget, WidgetData};
-use vtree::diff::{self, Diff};
+use vtree::diff::{self, Diff, Context};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AParams {
@@ -49,17 +49,6 @@ impl Differ for MyDiffer {
 
     fn params_changed_a(&self, path: &diff::Path, curr: &A, last: &A) {
         println!("params_changed_a: `{}`: {:?} => {:?}", path, last.params, curr.params);
-    }
-}
-
-pub struct Context<D: Differ> {
-    // pub widgets: HashMap<diff::Path, Box<WidgetDataTrait<G>>>,
-    pub differ: D,
-}
-
-impl<D: Differ> Context<D> {
-    pub fn new(differ: D) -> Context<D> {
-        Context { differ: differ }
     }
 }
 
