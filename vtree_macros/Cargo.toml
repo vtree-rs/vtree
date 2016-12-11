@@ -9,3 +9,4 @@ regex = "0.1"
 
 [lib]
 crate-type = ["dylib"]
+plugin = true
