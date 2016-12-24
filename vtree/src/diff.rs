@@ -6,7 +6,7 @@ use std::vec::IntoIter;
 #[derive(Clone, Debug)]
 pub enum PathNode {
     Key(Key),
-    NodeField(&'static str),
+    Field(&'static str),
 }
 
 #[derive(Clone, Debug)]
@@ -25,7 +25,7 @@ impl Path {
         Path { path: p }
     }
 
-    pub fn add_node_field(&self, n: &'static str) -> Path {
+    pub fn add_field(&self, n: &'static str) -> Path {
         let mut p = self.path.clone();
         p.push(PathNode::NodeField(n));
         Path { path: p }
@@ -51,7 +51,7 @@ impl fmt::Display for Path {
             acc +
             &match p {
                 &PathNode::Key(ref k) => format!(".{}", k),
-                &PathNode::NodeField(ref n) => format!("::{}", n),
+                &PathNode::Field(ref n) => format!("::{}", n),
             }
         });
 

@@ -155,13 +155,13 @@ fn gen_group_impl_expand_widgets(group: &str, nodes: &[&Node]) -> Tokens {
             match field.child_type {
                 NodeChildType::Single => {
                     quote!{
-                        let path_field = path.add_node_field(#name_field_str);
+                        let path_field = path.add_field(#name_field_str);
                         #field_name_local = #field_name_local.expand_widgets(last_node.#name_field, &path_field);
                     }
                 }
                 NodeChildType::Optional => {
                     quote!{
-                        let path_field = path.add_node_field(#name_field_str);
+                        let path_field = path.add_field(#name_field_str);
                         #field_name_local = if let Some(field) = #field_name_local {
                             field.expand_widgets(last_node.#name_field, &path_field);
                         };
@@ -169,7 +169,7 @@ fn gen_group_impl_expand_widgets(group: &str, nodes: &[&Node]) -> Tokens {
                 }
                 NodeChildType::Multi => {
                     quote!{
-                        let path_field = path.add_node_field(#name_field_str);
+                        let path_field = path.add_field(#name_field_str);
                         #field_name_local.inplace_map(|key, node| {
                             node.expand_widgets(last_node.#name_field.get_by_key(key), &path_field.add_key(key.clone()))
                         });
@@ -184,13 +184,13 @@ fn gen_group_impl_expand_widgets(group: &str, nodes: &[&Node]) -> Tokens {
             match field.child_type {
                 NodeChildType::Single => {
                     quote!{
-                        let path_field = path.add_node_field(#name_field_str);
+                        let path_field = path.add_field(#name_field_str);
                         #field_name_local = #field_name_local.expand_widgets(None, &path_field);
                     }
                 }
                 NodeChildType::Optional => {
                     quote!{
-                        let path_field = path.add_node_field(#name_field_str);
+                        let path_field = path.add_field(#name_field_str);
                         #field_name_local = if let Some(field) = #field_name_local {
                             field.expand_widgets(None, &path_field);
                         };
@@ -198,7 +198,7 @@ fn gen_group_impl_expand_widgets(group: &str, nodes: &[&Node]) -> Tokens {
                 }
                 NodeChildType::Multi => {
                     quote!{
-                        let path_field = path.add_node_field(#name_field_str);
+                        let path_field = path.add_field(#name_field_str);
                         #field_name_local.inplace_map(|key, node| {
                             node.expand_widgets(None, &path_field.add_key(key.clone()))
                         });
@@ -221,13 +221,11 @@ fn gen_group_impl_expand_widgets(group: &str, nodes: &[&Node]) -> Tokens {
                 #field_name: #field_name_local
             }
         });
-        let de_con_struct_params = if node.params_type.is_some() {
-            Some(quote!{
+        let de_con_struct_params = node.params_type.as_ref().map(|_| {
+            quote!{
                 params: curr_params,
-            })
-        } else {
-            None
-        };
+            }
+        });
 
         quote!{
             #group_name::#node_name(#node_name{#(#destruct_fields,)* #de_con_struct_params}) => {
@@ -286,7 +284,7 @@ fn gen_group_impl_diff(group: &str, nodes: &[&Node]) -> Tokens {
             match field.child_type {
                 NodeChildType::Single => {
                     quote!{
-                        let curr_path = path.add_node_field(#name_field_str);
+                        let curr_path = path.add_field(#name_field_str);
                         curr_node.#name_field.diff(&curr_path.add_key(key.clone()), last_node.#name_field, ctx);
                     }
                 }
@@ -294,7 +292,7 @@ fn gen_group_impl_diff(group: &str, nodes: &[&Node]) -> Tokens {
                     let diff_group_child = Ident::from(format!("diff_{}",
                                                                to_snake_case(&field.group)));
                     quote!{
-                        let curr_path = path.add_node_field(#name_field_str);
+                        let curr_path = path.add_field(#name_field_str);
                         if let Some(curr_child) = curr_node.#name_field {
                             if let Some(last_child) = last_node.#name_field {
                                 curr_child.diff(&curr_path, last_child, ctx);
@@ -310,7 +308,7 @@ fn gen_group_impl_diff(group: &str, nodes: &[&Node]) -> Tokens {
                 }
                 NodeChildType::Multi => {
                     quote!{
-                        let curr_path = path.add_node_field(#name_field_str);
+                        let curr_path = path.add_field(#name_field_str);
                         for diff in curr_node.#name_field.diff(&last_node.#name_field) {
                             match diff {
                                 KeyedDiff::Added(key, _index, node) => {
