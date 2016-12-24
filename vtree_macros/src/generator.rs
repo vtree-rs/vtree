@@ -293,16 +293,14 @@ fn gen_group_impl_diff(group: &str, nodes: &[&Node]) -> Tokens {
                                                                to_snake_case(&field.group)));
                     quote!{
                         let curr_path = path.add_field(#name_field_str);
-                        if let Some(curr_child) = curr_node.#name_field {
-                            if let Some(last_child) = last_node.#name_field {
-                                curr_child.diff(&curr_path, last_child, ctx);
-                            } else {
-                                ctx.differ.#diff_group_child(&curr_path, &curr_child, Diff::Added);
-                            }
-                        } else {
-                            if let Some(last_child) = last_node.#name_field {
-                                ctx.differ.#diff_group_child(&curr_path, &last_child, Diff::Removed);
-                            }
+                        match (curr_node.#name_field, last_node.#name_field) {
+                            (Some(curr_child), Some(last_child)) =>
+                                curr_child.diff(&curr_path, last_child, ctx),
+                            (Some(curr_child), None) =>
+                                ctx.differ.#diff_group_child(&curr_path, &curr_child, Diff::Added),
+                            (None, Some(last_child)) =>
+                                ctx.differ.#diff_group_child(&curr_path, &last_child, Diff::Removed),
+                            (None, None) =>,
                         }
                     }
                 }
