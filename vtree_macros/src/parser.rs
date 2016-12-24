@@ -46,7 +46,7 @@ pub fn parse_nodes<'a>(ctx: &ExtCtxt,
                        mut p: Parser<'a>)
                        -> Result<ParsedData, DiagnosticBuilder<'a>> {
     let mut nodes = Vec::<Node>::new();
-    let mut group_name_to_node_names = HashMap::<String, Vec<String>>::new();
+    let mut group_name_to_nodes = HashMap::<String, Vec<Node>>::new();
 
     loop {
         let mut groups = Vec::<String>::new();
@@ -104,21 +104,17 @@ pub fn parse_nodes<'a>(ctx: &ExtCtxt,
             }
         }
 
-        nodes.push(Node {
+        let node = Node {
             name: name.clone(),
             params_type: params_type,
             fields: fields,
-        });
+        };
 
         for group in groups {
-            {
-                if let Some(nodes) = group_name_to_node_names.get_mut(&group) {
-                    nodes.push(name.clone());
-                    continue;
-                }
-            }
-            group_name_to_node_names.insert(group, vec![name.clone()]);
+            group_name_to_nodes.entry(group).or_insert_with(|| Vec::new()).push(node.clone());
         }
+
+        nodes.push(node);
 
         if try!(comma_delimiter(&mut p, &Token::Eof)) {
             break;
@@ -127,6 +123,6 @@ pub fn parse_nodes<'a>(ctx: &ExtCtxt,
 
     Ok(ParsedData {
         nodes: nodes,
-        group_name_to_node_names: group_name_to_node_names,
+        group_name_to_nodes: group_name_to_nodes,
     })
 }

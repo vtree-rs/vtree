@@ -6,6 +6,7 @@ use quote::Tokens;
 use NodeChildType;
 use ParsedData;
 use Node;
+use std::iter::once;
 
 fn to_snake_case(s: &str) -> String {
     lazy_static! {
@@ -34,17 +35,17 @@ fn gen_node_defs<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Tokens> + 'a {
             match field.child_type {
                 NodeChildType::Single => {
                     quote!{
-                        pub #name: ::std::boxed::Box<#group>
+                        pub #name: ::vtree::child::Single<#group, AllNodes>,
                     }
                 }
                 NodeChildType::Optional => {
                     quote!{
-                        pub #name: ::std::option::Option<::std::boxed::Box<#group>>
+                        pub #name: ::vtree::child::Option<#group, AllNodes>,
                     }
                 }
                 NodeChildType::Multi => {
                     quote!{
-                        pub #name: ::vtree::key::KeyedNodes<#group>
+                        pub #name: ::vtree::child::Multi<#group, AllNodes>,
                     }
                 }
             }
@@ -62,95 +63,37 @@ fn gen_node_defs<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Tokens> + 'a {
             #[derive(Debug, Clone)]
             pub struct #name {
                 #params_field,
-                #(#fields,)*
+                #(#fields)*
             }
         }
     })
 }
 
-fn gen_group_defs<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Tokens> + 'a {
-    pd.group_name_to_node_names.iter().map(|(group, nodes)| {
-        let vars = nodes.iter().map(|node| {
-            let node = to_ident(node);
-            quote!{
-                #node(#node)
-            }
-        });
-
-        let name = to_ident(group);
+fn gen_group_def(group: &str, nodes: &[Node]) -> Tokens {
+    let vars = nodes.iter().map(|node| {
+        let node = to_ident(&node.name);
         quote!{
-            #[derive(Debug, Clone)]
-            pub enum #name {
-                Widget(::std::boxed::Box<::vtree::widget::WidgetDataTrait<#name>>),
-                #(#vars,)*
-            }
-        }
-    })
-}
-
-fn gen_differ_def(pd: &ParsedData) -> Tokens {
-    let diff_groups = pd.group_name_to_node_names.keys().map(|group| {
-        let name_diff_fn = Ident::from(format!("diff_{}", to_snake_case(group)));
-        let name_group = to_ident(group);
-        quote!{
-            fn #name_diff_fn(
-                &self,
-                path: &::vtree::diff::Path,
-                curr: &#name_group,
-                diff: ::vtree::diff::Diff,
-            );
+            #node(#node)
         }
     });
-    let reorders = pd.nodes.iter().flat_map(|node| {
-        let name_node = to_ident(&node.name);
-        let name_node_sc = to_snake_case(&node.name);
-        node.fields.iter().map(move |field| {
-            let name_fn =
-                Ident::from(format!("reorder_{}_{}", name_node_sc, to_snake_case(&field.name)));
-            quote!{
-                fn #name_fn(
-                    &self,
-                    path: &::vtree::diff::Path,
-                    parent: &#name_node,
-                    index_curr: usize,
-                    index_last: usize,
-                );
-            }
-        })
-    });
-    let params_changes = pd.nodes
-        .iter()
-        .filter(|node| node.params_type.is_some())
-        .map(|node| {
-            let name_node = to_ident(&node.name);
-            let name_fn = Ident::from(format!("params_changed_{}", to_snake_case(&node.name)));
-            quote!{
-                fn #name_fn(
-                    &self,
-                    path: &::vtree::diff::Path,
-                    curr: &#name_node,
-                    last: &#name_node,
-                );
-            }
-        });
 
+    let name = to_ident(group);
     quote!{
-        pub trait Differ {
-            #(#diff_groups)*
-            #(#reorders)*
-            #(#params_changes)*
+        #[derive(Debug, Clone)]
+        pub enum #name {
+            #(#vars,)*
+            Widget(::std::boxed::Box<::vtree::widget::WidgetDataTrait<#name>>),
         }
     }
 }
 
-fn gen_group_impl_expand_widgets(group: &str, nodes: &[&Node]) -> Tokens {
-    let group_name = to_ident(group);
-    let variants = nodes.iter().map(|node| {
+fn gen_all_nodes_impl_expand_widgets(pd: &ParsedData) -> Tokens {
+    let variants = pd.nodes.iter().map(|node| {
         let node_name = to_ident(&node.name);
 
         if node.fields.is_empty() {
             return quote!{
-                #group_name::#node_name(curr_node) => #group_name::#node_name(curr_node),
+                AllNodes::#node_name(curr_node) => AllNodes::#node_name(curr_node),
             };
         }
 
@@ -177,7 +120,10 @@ fn gen_group_impl_expand_widgets(group: &str, nodes: &[&Node]) -> Tokens {
                     quote!{
                         let path_field = path.add_field(#name_field_str);
                         #field_name_local.inplace_map(|key, node| {
-                            node.expand_widgets(last_node.#name_field.get_by_key(key), &path_field.add_key(key.clone()))
+                            node.expand_widgets(
+                                last_node.#name_field.get_by_key(key),
+                                &path_field.add_key(key.clone())
+                            )
                         });
                     }
                 }
@@ -234,13 +180,13 @@ fn gen_group_impl_expand_widgets(group: &str, nodes: &[&Node]) -> Tokens {
         });
 
         quote!{
-            #group_name::#node_name(#node_name{#(#destruct_fields,)* #de_con_struct_params}) => {
-                if let Some(&#group_name::#node_name(ref last_node)) = last {
+            AllNodes::#node_name(#node_name{#(#destruct_fields,)* #de_con_struct_params}) => {
+                if let Some(&AllNodes::#node_name(ref last_node)) = last {
                     #(#fields_then)*
                 } else {
                     #(#fields_else)*
                 }
-                #group_name::#node_name(#node_name{
+                AllNodes::#node_name(#node_name{
                     #(#construct_fields,)*
                     #de_con_struct_params
                 })
@@ -249,13 +195,17 @@ fn gen_group_impl_expand_widgets(group: &str, nodes: &[&Node]) -> Tokens {
     });
 
     quote!{
-        pub fn expand_widgets(self, last: Option<&#group_name>, path: &::vtree::diff::Path) -> #group_name {
-            let curr = if let #group_name::Widget(widget_data) = self {
+        pub fn expand_widgets(
+            self,
+            last: ::std::option::Option<&AllNodes>,
+            path: &::vtree::diff::Path
+        ) -> AllNodes {
+            let curr = if let AllNodes::Widget(widget_data) = self {
                 match widget_data.render() {
                     Some(result) => result,
                     None => {
                         let last = last.unwrap();
-                        if let &#group_name::Widget(..) = last {
+                        if let &AllNodes::Widget(..) = last {
                             panic!("Widgets not allowed in last in `{}`", path);
                         }
                         return last.clone();
@@ -267,25 +217,18 @@ fn gen_group_impl_expand_widgets(group: &str, nodes: &[&Node]) -> Tokens {
 
             match curr {
                 #(#variants)*
-                #group_name::Widget(_) => unreachable!(),
+                AllNodes::Widget(_) => unreachable!(),
             }
         }
     }
 }
 
-fn gen_group_impl_diff(group: &str, nodes: &[&Node]) -> Tokens {
-    let group_name = to_ident(group);
-    let diff_group = Ident::from(format!("diff_{}", to_snake_case(group)));
-
-    let variants = nodes.iter().map(|node| {
+fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
+    let variants = pd.nodes.iter().map(|node| {
         // TODO: handle single & optional fields
         let fields = node.fields.iter().map(|field| {
             let name_field_str = &field.name;
             let name_field = to_ident(&field.name);
-            let reorder_children = Ident::from(format!("reorder_{}_{}",
-                to_snake_case(&node.name),
-                to_snake_case(&field.name),
-            ));
 
             match field.child_type {
                 NodeChildType::Single => {
@@ -295,18 +238,28 @@ fn gen_group_impl_diff(group: &str, nodes: &[&Node]) -> Tokens {
                     }
                 }
                 NodeChildType::Optional => {
-                    let diff_group_child = Ident::from(format!("diff_{}",
-                                                               to_snake_case(&field.group)));
                     quote!{
                         let curr_path = path.add_field(#name_field_str);
-                        match (curr_node.#name_field, last_node.#name_field) {
+                        match (*curr_node.#name_field, *last_node.#name_field) {
                             (Some(curr_child), Some(last_child)) =>
                                 curr_child.diff(&curr_path, last_child, ctx),
                             (Some(curr_child), None) =>
-                                ctx.differ.#diff_group_child(&curr_path, &curr_child, Diff::Added),
+                                ctx.differ.diff(
+                                    &curr_path,
+                                    Diff::Added {
+                                        index: 0,
+                                        curr: &curr_child,
+                                    }
+                                ),
                             (None, Some(last_child)) =>
-                                ctx.differ.#diff_group_child(&curr_path, &last_child, Diff::Removed),
-                            (None, None) =>,
+                                ctx.differ.diff(
+                                    &curr_path,
+                                    Diff::Removed {
+                                        index: 0,
+                                        last: &curr_child,
+                                    }
+                                ),
+                            (None, None) => {}
                         }
                     }
                 }
@@ -315,18 +268,34 @@ fn gen_group_impl_diff(group: &str, nodes: &[&Node]) -> Tokens {
                         let curr_path = path.add_field(#name_field_str);
                         for diff in curr_node.#name_field.diff(&last_node.#name_field) {
                             match diff {
-                                KeyedDiff::Added(key, _index, node) => {
-                                    ctx.differ.#diff_group(&curr_path.add_key(key.clone()), &node, Diff::Added);
-                                },
-                                KeyedDiff::Removed(key, _index, node) => {
-                                    ctx.differ.#diff_group(&curr_path.add_key(key.clone()), &node, Diff::Removed);
-                                },
-                                KeyedDiff::Unchanged(key, _index, curr_child, last_child) => {
-                                    curr_child.diff(&curr_path.add_key(key.clone()), last_child, ctx);
-                                },
-                                KeyedDiff::Reordered(i_cur, i_last) => {
-                                    ctx.differ.#reorder_children(path, &curr_node, i_cur, i_last);
-                                },
+                                MultiDiff::Added(key, index, node) => {
+                                    ctx.differ.diff(
+                                        &curr_path.add_key(key.clone()),
+                                        Diff::Added {
+                                            index: index,
+                                            curr: node,
+                                        }
+                                    );
+                                }
+                                MultiDiff::Removed(key, index, node) => {
+                                    ctx.differ.diff(
+                                        &curr_path.add_key(key.clone()),
+                                        Diff::Removed {
+                                            index: index,
+                                            last: node,
+                                        }
+                                    );
+                                }
+                                MultiDiff::Unchanged(key, _index, curr_child, last_child) =>
+                                    curr_child.diff(&curr_path.add_key(key.clone()), last_child, ctx),
+                                MultiDiff::Reordered(indices) => {
+                                    ctx.differ.diff(
+                                        &curr_path,
+                                        Diff::Reordered {
+                                            indices: indices,
+                                        }
+                                    );
+                                }
                             }
                         }
                     }
@@ -335,55 +304,54 @@ fn gen_group_impl_diff(group: &str, nodes: &[&Node]) -> Tokens {
         });
 
         let node_name = to_ident(&node.name);
-        let params_changed = Ident::from(format!("params_changed_{}", to_snake_case(&node.name)));
         quote!{
-            &#group_name::#node_name(ref curr_node) => {
-                if let &#group_name::#node_name(ref last_node) = last {
+            &AllNodes::#node_name(ref curr_node) => {
+                if let &AllNodes::#node_name(ref last_node) = last {
                     if curr_node.params != last_node.params {
-                        ctx.differ.#params_changed(path, curr_node, &last_node);
+                        ctx.differ.diff(path, Diff::ParamsChanged {
+                            curr: self,
+                            last: last,
+                        });
                     }
                     #(#fields)*
                 } else {
                     // TODO: call node removed hook
-                    ctx.differ.#diff_group(path, &self, Diff::Replaced);
+                    ctx.differ.diff(path, Diff::Replaced {
+                        curr: self,
+                        last: last,
+                    });
                 }
             },
         }
     });
 
     quote!{
-        pub fn diff<D: Differ>(
-            &self,
+        pub fn diff<'a, D: ::vtree::diff::Differ<'a, AllNodes>>(
+            &'a self,
             path: &::vtree::diff::Path,
-            last: &#group_name,
-            ctx: &::vtree::diff::Context<D>,
+            last: &'a AllNodes,
+            ctx: &'a ::vtree::diff::Context<'a, AllNodes, D>,
         ) {
             use ::vtree::diff::Diff;
-            use ::vtree::key::KeyedDiff;
+            use ::vtree::child::MultiDiff;
 
             match self {
                 #(#variants)*
-                &#group_name::Widget(_) => unreachable!(),
+                &AllNodes::Widget(_) => unreachable!(),
             }
         }
     }
 }
 
-fn gen_group_impls<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Tokens> + 'a {
-    pd.group_name_to_node_names.iter().map(move |(group, node_names)| {
-        let nodes: Vec<_> = node_names.iter()
-            .filter_map(|name| pd.nodes.iter().find(|n| &n.name == name))
-            .collect();
-        let expand_widgets = gen_group_impl_expand_widgets(group, &nodes[..]);
-        let diff = gen_group_impl_diff(group, &nodes[..]);
-        let name = to_ident(group);
-        quote!{
-            impl #name {
-                #expand_widgets
-                #diff
-            }
+fn gen_all_nodes_impl(pd: &ParsedData) -> Tokens {
+    let expand_widgets = gen_all_nodes_impl_expand_widgets(pd);
+    let diff = gen_all_nodes_impl_diff(pd);
+    quote!{
+        impl AllNodes {
+            #expand_widgets
+            #diff
         }
-    })
+    }
 }
 
 fn gen_node_constructor_fns<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Tokens> + 'a {
@@ -403,19 +371,19 @@ fn gen_node_constructor_fns<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Toke
             match field.child_type {
                 NodeChildType::Single => {
                     quote!{
-                        #field_name_local: #group_name,
+                        #field_name_local: ::vtree::child::Single<#group_name, AllNodes>,
                     }
-                },
+                }
                 NodeChildType::Optional => {
                     quote!{
-                        #field_name_local: ::std::option::Option<#group_name>,
+                        #field_name_local: ::vtree::child::Optional<#group_name, AllNodes>,
                     }
-                },
+                }
                 NodeChildType::Multi => {
                     quote!{
-                        #field_name_local: ::vtree::key::KeyedNodes<#group_name>,
+                        #field_name_local: ::vtree::child::Multi<#group_name, AllNodes>,
                     }
-                },
+                }
             }
 
         });
@@ -446,46 +414,75 @@ fn gen_node_constructor_fns<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Toke
     })
 }
 
-fn gen_group_from_node_impls<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Tokens> + 'a {
-    use std::iter::once;
-    pd.group_name_to_node_names.iter().flat_map(|(group, nodes)| {
-        let group_name = to_ident(group);
-        once(quote!{
-            impl <WD> ::std::convert::From<WD> for #group_name
-                where WD: ::vtree::widget::WidgetDataTrait<#group_name> + 'static
-            {
-                fn from(widget_data: WD) -> #group_name {
-                    #group_name::Widget(Box::new(widget_data))
-                }
+fn gen_group_from_node_impls<'a>(group: &'a str,
+                                 nodes: &'a [Node])
+                                 -> impl Iterator<Item = Tokens> + 'a {
+    let group_name = to_ident(group);
+    once(quote!{
+        impl <WD> ::std::convert::From<WD> for #group_name
+            where WD: ::vtree::widget::WidgetDataTrait<#group_name> + 'static
+        {
+            fn from(widget_data: WD) -> #group_name {
+                #group_name::Widget(Box::new(widget_data))
             }
-        })
-        .chain(nodes.iter().map(move |node| {
-            let node_name = to_ident(node);
+        }
+    })
+        .chain(nodes.iter()
+            .map(move |node| {
+                let node_name = to_ident(&node.name);
+                quote!{
+                        impl ::std::convert::From<#node_name> for #group_name {
+                            fn from(node: #node_name) -> #group_name {
+                                #group_name::#node_name(node)
+                            }
+                        }
+                    }
+            })
+        )
+}
+
+fn gen_all_nodes_from_group_impls<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Tokens> + 'a {
+    pd.group_name_to_nodes.iter().map(|(group, nodes)| {
+        let group_name = to_ident(group);
+        let variants = nodes.iter().map(|node| {
+            let node_name = to_ident(&node.name);
             quote!{
-                impl ::std::convert::From<#node_name> for #group_name {
-                    fn from(node: #node_name) -> #group_name {
-                        #group_name::#node_name(node)
+                #group_name::#node_name(node) => AllNodes::#node_name(node),
+            }
+        });
+
+        quote!{
+            impl ::std::convert::From<#group_name> for AllNodes {
+                fn from(group: #group_name) -> AllNodes {
+                    match group {
+                        #(#variants)*
                     }
                 }
             }
-        }))
+        }
     })
 }
 
 pub fn generate_defs(pd: ParsedData) -> TokenStream {
     let node_defs = gen_node_defs(&pd);
-    let group_defs = gen_group_defs(&pd);
-    let differ_def = gen_differ_def(&pd);
-    let group_impls = gen_group_impls(&pd);
+    let group_defs = pd.group_name_to_nodes
+        .iter()
+        .map(|(g, ns)| gen_group_def(g, &ns[..]))
+        .chain(once(gen_group_def("AllNodes", &pd.nodes[..])));
+    let all_nodes_impl = gen_all_nodes_impl(&pd);
     let node_constructor_fns = gen_node_constructor_fns(&pd);
-    let group_from_node_impls = gen_group_from_node_impls(&pd);
+    let group_from_node_impls = pd.group_name_to_nodes
+        .iter()
+        .flat_map(|(g, ns)| gen_group_from_node_impls(g, &ns[..]))
+        .chain(once(()).flat_map(|_| gen_group_from_node_impls("AllNodes", &pd.nodes[..])));
+    let all_nodes_from_group_impls = gen_all_nodes_from_group_impls(&pd);
     let defs = quote!{
         #(#node_defs)*
         #(#group_defs)*
-        #(#group_impls)*
-        #differ_def
+        #all_nodes_impl
         #(#node_constructor_fns)*
         #(#group_from_node_impls)*
+        #(#all_nodes_from_group_impls)*
     };
     println!("{}", defs);
     lex(defs.as_str())

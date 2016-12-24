@@ -2,6 +2,8 @@ use key::Key;
 use std::fmt;
 use std::iter::{IntoIterator, FromIterator, Extend};
 use std::vec::IntoIter;
+use std::marker::PhantomData;
+use std::fmt::Debug;
 
 #[derive(Clone, Debug)]
 pub enum PathNode {
@@ -40,7 +42,7 @@ impl Path {
         (Path { path: left.to_vec() }, Path { path: right.to_vec() })
     }
 
-    fn extend<T>(&self, iter: T) -> Path
+    pub fn extend<T>(&self, iter: T) -> Path
         where T: IntoIterator<Item = PathNode>
     {
         let mut p = self.path.clone();
@@ -87,20 +89,42 @@ impl fmt::Display for Path {
 }
 
 #[derive(Debug)]
-pub enum Diff {
-    Replaced,
-    Added,
-    Removed,
+pub enum Diff<'an, AN: 'an> {
+    Added {
+        index: usize,
+        curr: &'an AN,
+    },
+    Removed {
+        index: usize,
+        last: &'an AN,
+    },
+    Replaced {
+        curr: &'an AN,
+        last: &'an AN,
+    },
+    ParamsChanged {
+        curr: &'an AN,
+        last: &'an AN,
+    },
+    Reordered {
+        indices: Vec<(usize, usize)>,
+    },
+}
+
+pub trait Differ<'an, AN>: Debug {
+    fn diff(&'an self, &Path, diff: Diff<'an, AN>);
 }
 
 #[derive(Debug)]
-pub struct Context<D> {
+pub struct Context<'an, AN, D> where D: Differ<'an, AN> + 'an {
     // pub widgets: HashMap<diff::Path, Box<WidgetDataTrait<G>>>,
     pub differ: D,
+    pd: PhantomData<AN>,
+    pd2: PhantomData<&'an ()>,
 }
 
-impl<D> Context<D> {
-    pub fn new(differ: D) -> Context<D> {
-        Context { differ: differ }
+impl<'an, AN, D> Context<'an, AN, D> where D: Differ<'an, AN> {
+    pub fn new(differ: D) -> Context<'an, AN, D> {
+        Context { differ: differ, pd: PhantomData, pd2: PhantomData }
     }
 }

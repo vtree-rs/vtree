@@ -1,5 +1,6 @@
 #![feature(plugin_registrar, rustc_private)]
 #![feature(conservative_impl_trait)]
+#![recursion_limit = "128"]
 
 #[macro_use]
 extern crate quote;
@@ -26,31 +27,31 @@ use syntax::ext::base::SyntaxExtension;
 use syntax::tokenstream::TokenStream;
 use std::collections::HashMap;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum NodeChildType {
     Single,
     Optional,
     Multi,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NodeChild {
     name: String,
     group: String,
     child_type: NodeChildType,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Node {
     name: String,
     params_type: Option<String>,
     fields: Vec<NodeChild>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ParsedData {
     nodes: Vec<Node>,
-    group_name_to_node_names: HashMap<String, Vec<String>>,
+    group_name_to_nodes: HashMap<String, Vec<Node>>,
 }
 
 struct MacroDefineNodes;
