@@ -148,6 +148,12 @@ fn gen_group_impl_expand_widgets(group: &str, nodes: &[&Node]) -> Tokens {
     let variants = nodes.iter().map(|node| {
         let node_name = to_ident(&node.name);
 
+        if node.fields.is_empty() {
+            return quote!{
+                #group_name::#node_name(curr_node) => #group_name::#node_name(curr_node),
+            };
+        }
+
         let fields_then = node.fields.iter().map(|field| {
             let name_field_str = &field.name;
             let name_field = to_ident(&field.name);
