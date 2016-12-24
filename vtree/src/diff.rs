@@ -1,6 +1,6 @@
 use key::Key;
 use std::fmt;
-use std::iter::IntoIterator;
+use std::iter::{IntoIterator, FromIterator, Extend};
 use std::vec::IntoIter;
 
 #[derive(Clone, Debug)]
@@ -27,7 +27,24 @@ impl Path {
 
     pub fn add_field(&self, n: &'static str) -> Path {
         let mut p = self.path.clone();
-        p.push(PathNode::NodeField(n));
+        p.push(PathNode::Field(n));
+        Path { path: p }
+    }
+
+    pub fn len(&self) -> usize {
+        self.path.len()
+    }
+
+    pub fn split_at(&self, mid: usize) -> (Path, Path) {
+        let (left, right) = self.path.split_at(mid);
+        (Path { path: left.to_vec() }, Path { path: right.to_vec() })
+    }
+
+    fn extend<T>(&self, iter: T) -> Path
+        where T: IntoIterator<Item = PathNode>
+    {
+        let mut p = self.path.clone();
+        p.extend(iter);
         Path { path: p }
     }
 
@@ -44,6 +61,16 @@ impl IntoIterator for Path {
         self.path.into_iter()
     }
 }
+
+impl FromIterator<PathNode> for Path {
+    fn from_iter<T>(iter: T) -> Self
+        where T: IntoIterator<Item = PathNode>
+    {
+        let p: Vec<_> = iter.into_iter().collect();
+        Path { path: p }
+    }
+}
+
 
 impl fmt::Display for Path {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
