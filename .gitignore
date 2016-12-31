@@ -6,3 +6,6 @@
 
 /vtree_test/target/
 /vtree_test/Cargo.lock
+
+/target/
+/Cargo.lock
