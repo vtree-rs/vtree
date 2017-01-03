@@ -116,15 +116,13 @@ pub trait Differ<'an, AN>: Debug {
 }
 
 #[derive(Debug)]
-pub struct Context<'an, AN, D> where D: Differ<'an, AN> + 'an {
+pub struct Context<AN> {
     // pub widgets: HashMap<diff::Path, Box<WidgetDataTrait<G>>>,
-    pub differ: D,
     pd: PhantomData<AN>,
-    pd2: PhantomData<&'an ()>,
 }
 
-impl<'an, AN, D> Context<'an, AN, D> where D: Differ<'an, AN> {
-    pub fn new(differ: D) -> Context<'an, AN, D> {
-        Context { differ: differ, pd: PhantomData, pd2: PhantomData }
+impl<AN> Context<AN> {
+    pub fn new() -> Context<AN> {
+        Context { pd: PhantomData }
     }
 }

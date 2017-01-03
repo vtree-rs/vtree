@@ -88,9 +88,7 @@ impl<G, AN> From<G> for Option<G, AN>
 
 
 pub enum MultiDiff<'a, AN: 'a> {
-    Added(&'a Key, usize, &'a AN),
-    Removed(&'a Key, usize, &'a AN),
-    Unchanged(&'a Key, usize, &'a AN, &'a AN),
+    Node(&'a Key, usize, StdOption<&'a AN>, StdOption<&'a AN>),
     Reordered(Vec<(usize, usize)>),
 }
 
@@ -167,6 +165,10 @@ impl<G, AN> Multi<G, AN>
         self.ordered.iter().map(move |key| (key, self.nodes.get(key).unwrap()))
     }
 
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = (&'a Key, &'a AN)> + 'a {
+        self.nodes.iter()
+    }
+
     pub fn diff<'a>(&'a self,
                     last: &'a Multi<G, AN>)
                     -> impl Iterator<Item = MultiDiff<'a, AN>> + 'a {
@@ -175,18 +177,16 @@ impl<G, AN> Multi<G, AN>
             .enumerate()
             .filter_map(move |(i, k)| {
                 if !self.nodes.contains_key(k) {
-                    Some(MultiDiff::Removed(k, i, last.nodes.get(k).unwrap()))
+                    // removed
+                    Some(MultiDiff::Node(k, i, None, Some(last.nodes.get(k).unwrap())))
                 } else {
                     None
                 }
             })
             .chain(self.ordered.iter().enumerate().map(move |(i, k)| {
                 let n_cur = self.nodes.get(k).unwrap();
-                if let Some(ref n_last) = last.nodes.get(k) {
-                    MultiDiff::Unchanged(k, i, n_cur, n_last)
-                } else {
-                    MultiDiff::Added(k, i, n_cur)
-                }
+                // unchanged or added
+                MultiDiff::Node(k, i, Some(n_cur), last.nodes.get(k))
             }))
             .chain(self.ordered.iter().enumerate().filter_map(move |(i, k)| {
                 if let Some(i_last) = last.ordered.iter().position(|k_last| k == k_last) {
