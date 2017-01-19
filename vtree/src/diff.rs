@@ -5,13 +5,13 @@ use std::vec::IntoIter;
 use std::marker::PhantomData;
 use std::fmt::Debug;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum PathNode {
     Key(Key),
     Field(&'static str),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Path {
     path: Vec<PathNode>,
 }
