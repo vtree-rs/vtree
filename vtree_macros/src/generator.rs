@@ -653,7 +653,7 @@ pub fn generate_defs(pd: ParsedData) -> TokenStream {
     let group_from_node_impls = pd.group_name_to_nodes
         .iter()
         .flat_map(|(g, ns)| gen_group_from_node_impls(g, &ns[..]))
-        .chain(once(()).flat_map(|_| gen_group_from_node_impls("AllNodes", &pd.nodes[..])));
+        .chain(gen_group_from_node_impls("AllNodes", &pd.nodes[..]));
     let all_nodes_from_group_impls = gen_all_nodes_from_group_impls(&pd);
     let defs = quote!{
         #(#node_defs)*
