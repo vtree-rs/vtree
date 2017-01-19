@@ -502,52 +502,87 @@ fn gen_node_constructor_fns<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Toke
         let node_name = to_ident(&node.name);
         let node_name_sc = Ident::from(to_snake_case(&node.name));
 
-        let maybe_params_arg = node.params_type.as_ref().map(|params_type| {
+        let maybe_params_generic = node.params_type.as_ref().map(|params_type| {
             let params_type_name = to_ident(params_type);
             quote!{
-                params: #params_type_name,
+                P: ::std::convert::Into<#params_type_name>,
             }
         });
-        let field_args = node.fields.iter().map(|field| {
-            let field_name_local = Ident::from(format!("child_{}", field.name));
+        let maybe_params_arg = node.params_type.as_ref().map(|_| {
+            quote!{
+                params: P,
+            }
+        });
+
+
+        let field_arg_generics = node.fields.iter().enumerate().map(|(index, field)| {
             let group_name = to_ident(&field.group);
+            let generic_name = Ident::from(format!("C{}", index));
             match field.child_type {
                 NodeChildType::Single => {
                     quote!{
-                        #field_name_local: ::vtree::child::Single<#group_name, AllNodes>,
+                        #generic_name: ::std::convert::Into<
+                            ::vtree::child::Single<#group_name, AllNodes>
+                        >,
                     }
                 }
                 NodeChildType::Optional => {
                     quote!{
-                        #field_name_local: ::vtree::child::Optional<#group_name, AllNodes>,
+                        #generic_name: ::std::convert::Into<
+                            ::vtree::child::Optional<#group_name, AllNodes>
+                        >,
                     }
                 }
                 NodeChildType::Multi => {
                     quote!{
-                        #field_name_local: ::vtree::child::Multi<#group_name, AllNodes>,
+                        #generic_name: ::std::convert::Into<
+                            ::vtree::child::Multi<#group_name, AllNodes>
+                        >,
                     }
                 }
             }
-
+        });
+        let field_args = node.fields.iter().enumerate().map(|(index, field)| {
+            let field_name_local = Ident::from(format!("child_{}", field.name));
+            let generic_name = Ident::from(format!("C{}", index));
+            match field.child_type {
+                NodeChildType::Single => {
+                    quote!{
+                        #field_name_local: #generic_name,
+                    }
+                }
+                NodeChildType::Optional => {
+                    quote!{
+                        #field_name_local: #generic_name,
+                    }
+                }
+                NodeChildType::Multi => {
+                    quote!{
+                        #field_name_local: #generic_name,
+                    }
+                }
+            }
         });
 
         let maybe_params_constr = node.params_type.as_ref().map(|_params_type| {
             quote!{
-                params: params,
+                params: params.into(),
             }
         });
         let field_constrs = node.fields.iter().map(|field| {
             let field_name_local = Ident::from(format!("child_{}", field.name));
             let field_name = to_ident(&field.name);
             quote!{
-                #field_name: #field_name_local,
+                #field_name: #field_name_local.into(),
             }
         });
 
         quote!{
-            pub fn #node_name_sc<T>(#maybe_params_arg #(#field_args)*) -> T
-                where T: ::std::convert::From<#node_name>
-            {
+            pub fn #node_name_sc<
+                #maybe_params_generic
+                #(#field_arg_generics)*
+                R: ::std::convert::From<#node_name>,
+            >(#maybe_params_arg #(#field_args)*) -> R {
                 ::std::convert::From::from(#node_name {
                     #maybe_params_constr
                     #(#field_constrs)*
