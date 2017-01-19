@@ -99,6 +99,7 @@ pub enum Diff<'an, AN: 'an> {
         last: &'an AN,
     },
     Replaced {
+        index: usize,
         curr: &'an AN,
         last: &'an AN,
     },

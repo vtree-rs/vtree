@@ -412,6 +412,7 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
                 differ.diff(
                     path,
                     Diff::Replaced {
+                        index: index,
                         curr: curr,
                         last: last,
                     }
