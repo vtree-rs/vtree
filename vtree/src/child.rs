@@ -120,17 +120,6 @@ impl<G, AN> Multi<G, AN>
         }
     }
 
-    pub fn with_data<T>(nodes: T) -> Multi<G, AN>
-        where T: IntoIterator<Item = (Key, G)>
-    {
-        let it = nodes.into_iter();
-        let mut nodes = Multi::with_capacity(it.size_hint().0);
-        for n in it {
-            nodes.push(n.0, n.1);
-        }
-        nodes
-    }
-
     pub fn get_by_key(&self, key: &Key) -> StdOption<&AN> {
         self.nodes.get(key)
     }
@@ -199,5 +188,46 @@ impl<G, AN> Multi<G, AN>
                     None
                 }
             }))
+    }
+}
+
+pub trait IntoMultiEntry<G, AN>
+    where G: Into<AN>
+{
+    fn into_multi_entry(self) -> (Key, G);
+}
+
+impl <K, G, AN> IntoMultiEntry<G, AN> for (K, G)
+    where K: Into<Key>,
+          G: Into<AN>
+{
+    fn into_multi_entry(self) -> (Key, G) {
+        (self.0.into(), self.1)
+    }
+}
+
+impl <'a, K, G, AN> IntoMultiEntry<G, AN> for &'a (K, G)
+    where K: 'a + Clone + Into<Key>,
+          G: 'a + Clone + Into<AN>
+{
+    fn into_multi_entry(self) -> (Key, G) {
+        (self.0.clone().into(), self.1.clone())
+    }
+}
+
+
+impl <G, AN, IME, I> From<I> for Multi<G, AN>
+    where G: Into<AN>,
+          IME: IntoMultiEntry<G, AN>,
+          I: IntoIterator<Item = IME>
+{
+    fn from(nodes: I) -> Multi<G, AN> {
+        let it = nodes.into_iter();
+        let mut multi = Multi::with_capacity(it.size_hint().0);
+        for e in it {
+            let e = e.into_multi_entry();
+            multi.push(e.0, e.1);
+        }
+        multi
     }
 }
