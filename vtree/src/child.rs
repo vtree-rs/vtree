@@ -6,22 +6,25 @@ use key::Key;
 use std::option::Option as StdOption;
 
 pub struct Single<G, AN>
-    where AN: From<G>
+    where G: Into<AN>
 {
     node: Box<AN>,
     pd: PhantomData<G>,
 }
 
 impl<G, AN> Single<G, AN>
-    where AN: From<G>
+    where G: Into<AN>
 {
     pub fn new(node: G) -> Single<G, AN> {
-        node.into()
+        Single {
+            node: Box::new(node.into()),
+            pd: PhantomData,
+        }
     }
 }
 
 impl<G, AN> Deref for Single<G, AN>
-    where AN: From<G>
+    where G: Into<AN>
 {
     type Target = AN;
 
@@ -31,34 +34,34 @@ impl<G, AN> Deref for Single<G, AN>
 }
 
 impl<G, AN> From<G> for Single<G, AN>
-    where AN: From<G>
+    where G: Into<AN>
 {
     fn from(node: G) -> Single<G, AN> {
-        Single {
-            node: Box::new(node.into()),
-            pd: PhantomData,
-        }
+        Single::new(node)
     }
 }
 
 
 pub struct Option<G, AN>
-    where AN: From<G>
+    where G: Into<AN>
 {
     node: StdOption<Box<AN>>,
     pd: PhantomData<G>,
 }
 
 impl<G, AN> Option<G, AN>
-    where AN: From<G>
+    where G: Into<AN>
 {
     pub fn new(node: StdOption<G>) -> Option<G, AN> {
-        node.into()
+        Option {
+            node: node.map(|n| Box::new(n.into())),
+            pd: PhantomData,
+        }
     }
 }
 
 impl<G, AN> Deref for Option<G, AN>
-    where AN: From<G>
+    where G: Into<AN>
 {
     type Target = StdOption<Box<AN>>;
 
@@ -68,18 +71,15 @@ impl<G, AN> Deref for Option<G, AN>
 }
 
 impl<G, AN> From<StdOption<G>> for Option<G, AN>
-    where AN: From<G>
+    where G: Into<AN>
 {
     fn from(node: StdOption<G>) -> Option<G, AN> {
-        Option {
-            node: node.map(|n| Box::new(n.into())),
-            pd: PhantomData,
-        }
+        Option::new(node)
     }
 }
 
 impl<G, AN> From<G> for Option<G, AN>
-    where AN: From<G>
+    where G: Into<AN>
 {
     fn from(node: G) -> Option<G, AN> {
         Some(node).into()
@@ -94,7 +94,7 @@ pub enum MultiDiff<'a, AN: 'a> {
 
 #[derive(Debug, Clone)]
 pub struct Multi<G, AN>
-    where AN: From<G>
+    where G: Into<AN>
 {
     ordered: Vec<Key>,
     nodes: HashMap<Key, AN>,
@@ -102,7 +102,7 @@ pub struct Multi<G, AN>
 }
 
 impl<G, AN> Multi<G, AN>
-    where AN: From<G>
+    where G: Into<AN>
 {
     pub fn new() -> Multi<G, AN> {
         Multi {
