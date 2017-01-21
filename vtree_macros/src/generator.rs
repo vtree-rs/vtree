@@ -487,13 +487,89 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
     }
 }
 
+fn gen_all_nodes_impl_visit_variants<'a>(pd: &'a ParsedData, is_enter: bool) -> impl Iterator<Item = Tokens> + 'a  {
+    let name_visit = Ident::from(if is_enter {"visit_enter"} else {"visit_exit"});
+    pd.nodes.iter().filter_map(move |node| {
+        if node.fields.is_empty() {
+            return None;
+        }
+
+        let fields = node.fields.iter().map(|field| {
+            let name_field_str = &field.name;
+            let name_field = to_ident(&field.name);
+
+            match field.child_type {
+                NodeChildType::Single => {
+                    quote!{
+                        let curr_path = path.add_field(#name_field_str);
+                        if let Some(field) = &curr_node.#name_field {
+                            field.#name_visit(&curr_path, 0, f);
+                        }
+                    }
+                }
+                NodeChildType::Optional => {
+                    quote!{
+                        let curr_path = path.add_field(#name_field_str);
+                        &curr_node.#name_field.#name_visit(&curr_path, 0, f);
+                    }
+                }
+                NodeChildType::Multi => {
+                    quote!{
+                        let curr_path = path.add_field(#name_field_str);
+                        let it = curr_node.#name_field.iter_ordered().enumerate();
+                        for (index, (key, node)) in it {
+                            node.#name_visit(&curr_path.add_key(key.clone()), index, f);
+                        }
+                    }
+                }
+            }
+        });
+
+        let node_name = to_ident(&node.name);
+        Some(quote!{
+            &AllNodes::#node_name(ref curr_node) => {
+                #(#fields)*
+            }
+        })
+    })
+}
+
+fn gen_all_nodes_impl_visit(pd: &ParsedData) -> Tokens {
+    let variants_enter = gen_all_nodes_impl_visit_variants(pd, true);
+    let variants_exit = gen_all_nodes_impl_visit_variants(pd, false);
+
+    quote!{
+        pub fn visit_enter<F>(&self, path: &::vtree::diff::Path, index: usize, f: &mut F)
+            where F: ::std::ops::FnMut(&::vtree::diff::Path, usize, &AllNodes)
+        {
+            f(path, index, self);
+            match self {
+                #(#variants_enter)*
+                _ => (),
+            }
+        }
+
+        pub fn visit_exit<F>(&self, path: &::vtree::diff::Path, index: usize, f: &mut F)
+            where F: ::std::ops::FnMut(&::vtree::diff::Path, usize, &AllNodes)
+        {
+            match self {
+                #(#variants_exit)*
+                _ => (),
+            }
+            f(path, index, self);
+        }
+    }
+}
+
 fn gen_all_nodes_impl(pd: &ParsedData) -> Tokens {
     let expand_widgets = gen_all_nodes_impl_expand_widgets(pd);
     let diff = gen_all_nodes_impl_diff(pd);
+    let visit = gen_all_nodes_impl_visit(pd);
     quote!{
         impl AllNodes {
             #expand_widgets
             #diff
+            #visit
         }
     }
 }
