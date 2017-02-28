@@ -7,11 +7,12 @@ extern crate quote;
 extern crate syntax;
 extern crate syntax_pos;
 extern crate rustc_plugin;
-extern crate rustc_errors;
 #[macro_use]
 extern crate lazy_static;
-extern crate proc_macro_tokens;
 extern crate regex;
+extern crate syn;
+#[macro_use]
+extern crate synom;
 
 mod parser;
 mod generator;
@@ -36,29 +37,29 @@ pub enum NodeChildType {
 
 #[derive(Debug, Clone)]
 pub struct NodeChild {
-    name: String,
-    group: String,
+    name: syn::Ident,
+    group: syn::Ident,
     child_type: NodeChildType,
 }
 
 #[derive(Debug, Clone)]
 pub struct Node {
-    name: String,
-    params_type: Option<String>,
+    name: syn::Ident,
+    params_type: Option<syn::Path>,
     fields: Vec<NodeChild>,
 }
 
 #[derive(Debug, Clone)]
 pub struct ParsedData {
     nodes: Vec<Node>,
-    group_name_to_nodes: HashMap<String, Vec<Node>>,
+    group_name_to_nodes: HashMap<syn::Ident, Vec<Node>>,
 }
 
 struct MacroDefineNodes;
 impl ProcMacro for MacroDefineNodes {
-    fn expand<'ctx>(&self, ctx: &'ctx mut ExtCtxt, _span: Span, ts: TokenStream) -> TokenStream {
-        let tts = ts.to_tts();
-        let pd = parse_nodes(ctx, ctx.new_parser_from_tts(&tts)).unwrap();
+    fn expand<'ctx>(&self, _: &'ctx mut ExtCtxt, _: Span, ts: TokenStream) -> TokenStream {
+        let input = ts.to_string();
+        let pd = parse_nodes(&input);
         generate_defs(pd)
     }
 }

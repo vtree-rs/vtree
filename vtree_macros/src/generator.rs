@@ -1,7 +1,7 @@
+use syntax::parse::{ParseSess, filemap_to_tts};
 use syntax::tokenstream::TokenStream;
-use proc_macro_tokens::parse::lex;
 use regex::{Regex, Captures};
-use quote::Ident;
+use syn::Ident;
 use quote::Tokens;
 use NodeChildType;
 use ParsedData;
@@ -23,15 +23,11 @@ fn to_snake_case(s: &str) -> String {
     })
 }
 
-fn to_ident(s: &str) -> Ident {
-    Ident::from(s)
-}
-
 fn gen_node_defs<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Tokens> + 'a {
     pd.nodes.iter().map(|node| {
         let fields = node.fields.iter().map(|field| {
-            let name = to_ident(&field.name);
-            let group = to_ident(&field.group);
+            let name = &field.name;
+            let group = &field.group;
             match field.child_type {
                 NodeChildType::Single => {
                     quote!{
@@ -52,13 +48,12 @@ fn gen_node_defs<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Tokens> + 'a {
         });
 
         let params_field = node.params_type.as_ref().map(|params| {
-            let params = to_ident(params);
             quote!{
                 pub params: #params
             }
         });
 
-        let name = to_ident(&node.name);
+        let name = &node.name;
         quote!{
             #[derive(Debug, Clone)]
             pub struct #name {
@@ -69,28 +64,26 @@ fn gen_node_defs<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Tokens> + 'a {
     })
 }
 
-fn gen_group_def(group: &str, nodes: &[Node]) -> Tokens {
+fn gen_group_def(group: &Ident, nodes: &[Node]) -> Tokens {
     let vars = nodes.iter().map(|node| {
-        let node = to_ident(&node.name);
+        let node = &node.name;
         quote!{
             #node(#node)
         }
     });
 
-    let name = to_ident(group);
     quote!{
         #[derive(Debug, Clone)]
-        pub enum #name {
+        pub enum #group {
             #(#vars,)*
-            Widget(::std::boxed::Box<::vtree::widget::WidgetDataTrait<#name>>),
+            Widget(::std::boxed::Box<::vtree::widget::WidgetDataTrait<#group>>),
         }
     }
 }
 
 fn gen_all_nodes_impl_expand_widgets(pd: &ParsedData) -> Tokens {
     let variants = pd.nodes.iter().map(|node| {
-        let node_name = to_ident(&node.name);
-
+        let node_name = &node.name;
         if node.fields.is_empty() {
             return quote!{
                 AllNodes::#node_name(curr_node) => AllNodes::#node_name(curr_node),
@@ -98,8 +91,8 @@ fn gen_all_nodes_impl_expand_widgets(pd: &ParsedData) -> Tokens {
         }
 
         let fields_then = node.fields.iter().map(|field| {
-            let name_field_str = &field.name;
-            let name_field = to_ident(&field.name);
+            let name_field_str = field.name.as_ref();
+            let name_field = &field.name;
             let field_name_local = Ident::from(format!("child_{}", field.name));
             match field.child_type {
                 NodeChildType::Single => {
@@ -131,7 +124,7 @@ fn gen_all_nodes_impl_expand_widgets(pd: &ParsedData) -> Tokens {
         });
 
         let fields_else = node.fields.iter().map(|field| {
-            let name_field_str = &field.name;
+            let name_field_str = field.name.as_ref();
             let field_name_local = Ident::from(format!("child_{}", field.name));
             match field.child_type {
                 NodeChildType::Single => {
@@ -160,14 +153,14 @@ fn gen_all_nodes_impl_expand_widgets(pd: &ParsedData) -> Tokens {
         });
 
         let destruct_fields = node.fields.iter().map(|field| {
-            let field_name = to_ident(&field.name);
+            let field_name = &field.name;
             let field_name_local = Ident::from(format!("child_{}", field.name));
             quote!{
                 #field_name: mut #field_name_local
             }
         });
         let construct_fields = node.fields.iter().map(|field| {
-            let field_name = to_ident(&field.name);
+            let field_name = &field.name;
             let field_name_local = Ident::from(format!("child_{}", field.name));
             quote!{
                 #field_name: #field_name_local
@@ -226,8 +219,8 @@ fn gen_all_nodes_impl_expand_widgets(pd: &ParsedData) -> Tokens {
 fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
     let variants = pd.nodes.iter().map(|node| {
         let fields = node.fields.iter().map(|field| {
-            let name_field_str = &field.name;
-            let name_field = to_ident(&field.name);
+            let name_field_str = field.name.as_ref();
+            let name_field = &field.name;
 
             match field.child_type {
                 NodeChildType::Single => {
@@ -326,7 +319,7 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
             }
         });
 
-        let node_name = to_ident(&node.name);
+        let node_name = &node.name;
 
         let maybe_params_cmp = node.params_type.as_ref().map(|_| quote!{
             if curr_node.params != last_node.params {
@@ -398,8 +391,8 @@ fn gen_all_nodes_impl_visit_variants<'a>(pd: &'a ParsedData, is_enter: bool) -> 
         }
 
         let fields = node.fields.iter().map(|field| {
-            let name_field_str = &field.name;
-            let name_field = to_ident(&field.name);
+            let name_field_str = field.name.as_ref();
+            let name_field = &field.name;
 
             match field.child_type {
                 NodeChildType::Single => {
@@ -428,7 +421,7 @@ fn gen_all_nodes_impl_visit_variants<'a>(pd: &'a ParsedData, is_enter: bool) -> 
             }
         });
 
-        let node_name = to_ident(&node.name);
+        let node_name = &node.name;
         Some(quote!{
             &AllNodes::#node_name(ref curr_node) => {
                 #(#fields)*
@@ -479,13 +472,12 @@ fn gen_all_nodes_impl(pd: &ParsedData) -> Tokens {
 
 fn gen_node_constructor_fns<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Tokens> + 'a {
     pd.nodes.iter().map(|node| {
-        let node_name = to_ident(&node.name);
-        let node_name_sc = Ident::from(to_snake_case(&node.name));
+        let node_name = &node.name;
+        let node_name_sc = Ident::from(to_snake_case(&node.name.as_ref()));
 
         let maybe_params_generic = node.params_type.as_ref().map(|params_type| {
-            let params_type_name = to_ident(params_type);
             quote!{
-                P: ::std::convert::Into<#params_type_name>,
+                P: ::std::convert::Into<#params_type>,
             }
         });
         let maybe_params_arg = node.params_type.as_ref().map(|_| {
@@ -496,7 +488,7 @@ fn gen_node_constructor_fns<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Toke
 
 
         let field_arg_generics = node.fields.iter().enumerate().map(|(index, field)| {
-            let group_name = to_ident(&field.group);
+            let group_name = &field.group;
             let generic_name = Ident::from(format!("C{}", index));
             match field.child_type {
                 NodeChildType::Single => {
@@ -551,7 +543,7 @@ fn gen_node_constructor_fns<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Toke
         });
         let field_constrs = node.fields.iter().map(|field| {
             let field_name_local = Ident::from(format!("child_{}", field.name));
-            let field_name = to_ident(&field.name);
+            let field_name = &field.name;
             quote!{
                 #field_name: #field_name_local.into(),
             }
@@ -572,26 +564,25 @@ fn gen_node_constructor_fns<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Toke
     })
 }
 
-fn gen_group_from_node_impls<'a>(group: &'a str,
+fn gen_group_from_node_impls<'a>(group: &'a Ident,
                                  nodes: &'a [Node])
                                  -> impl Iterator<Item = Tokens> + 'a {
-    let group_name = to_ident(group);
     once(quote!{
-        impl <WD> ::std::convert::From<WD> for #group_name
-            where WD: ::vtree::widget::WidgetDataTrait<#group_name> + 'static
+        impl <WD> ::std::convert::From<WD> for #group
+            where WD: ::vtree::widget::WidgetDataTrait<#group> + 'static
         {
-            fn from(widget_data: WD) -> #group_name {
-                #group_name::Widget(Box::new(widget_data))
+            fn from(widget_data: WD) -> #group {
+                #group::Widget(Box::new(widget_data))
             }
         }
     })
         .chain(nodes.iter()
             .map(move |node| {
-                let node_name = to_ident(&node.name);
+                let node_name = &node.name;
                 quote!{
-                        impl ::std::convert::From<#node_name> for #group_name {
-                            fn from(node: #node_name) -> #group_name {
-                                #group_name::#node_name(node)
+                        impl ::std::convert::From<#node_name> for #group {
+                            fn from(node: #node_name) -> #group {
+                                #group::#node_name(node)
                             }
                         }
                     }
@@ -601,17 +592,16 @@ fn gen_group_from_node_impls<'a>(group: &'a str,
 
 fn gen_all_nodes_from_group_impls<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Tokens> + 'a {
     pd.group_name_to_nodes.iter().map(|(group, nodes)| {
-        let group_name = to_ident(group);
         let variants = nodes.iter().map(|node| {
-            let node_name = to_ident(&node.name);
+            let node_name = &node.name;
             quote!{
-                #group_name::#node_name(node) => AllNodes::#node_name(node),
+                #group::#node_name(node) => AllNodes::#node_name(node),
             }
         });
 
         quote!{
-            impl ::std::convert::From<#group_name> for AllNodes {
-                fn from(group: #group_name) -> AllNodes {
+            impl ::std::convert::From<#group> for AllNodes {
+                fn from(group: #group) -> AllNodes {
                     match group {
                         #(#variants)*
                     }
@@ -622,17 +612,18 @@ fn gen_all_nodes_from_group_impls<'a>(pd: &'a ParsedData) -> impl Iterator<Item 
 }
 
 pub fn generate_defs(pd: ParsedData) -> TokenStream {
+    let all_nodes_ident = Ident::new("AllNodes");
     let node_defs = gen_node_defs(&pd);
     let group_defs = pd.group_name_to_nodes
         .iter()
         .map(|(g, ns)| gen_group_def(g, &ns[..]))
-        .chain(once(gen_group_def("AllNodes", &pd.nodes[..])));
+        .chain(once(gen_group_def(&all_nodes_ident, &pd.nodes[..])));
     let all_nodes_impl = gen_all_nodes_impl(&pd);
     let node_constructor_fns = gen_node_constructor_fns(&pd);
     let group_from_node_impls = pd.group_name_to_nodes
         .iter()
         .flat_map(|(g, ns)| gen_group_from_node_impls(g, &ns[..]))
-        .chain(gen_group_from_node_impls("AllNodes", &pd.nodes[..]));
+        .chain(gen_group_from_node_impls(&all_nodes_ident, &pd.nodes[..]));
     let all_nodes_from_group_impls = gen_all_nodes_from_group_impls(&pd);
     let defs = quote!{
         #(#node_defs)*
@@ -643,5 +634,9 @@ pub fn generate_defs(pd: ParsedData) -> TokenStream {
         #(#all_nodes_from_group_impls)*
     };
     println!("{}", defs);
-    lex(defs.as_str())
+    let source_str = defs.as_str();
+    let sess = ParseSess::new();
+    let filemap =
+        sess.codemap().new_filemap("<procmacro_lex>".to_string(), None, source_str.to_owned());
+    filemap_to_tts(&sess, filemap).into_iter().collect()
 }

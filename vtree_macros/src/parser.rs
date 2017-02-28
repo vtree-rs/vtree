@@ -1,128 +1,66 @@
-use syntax::ext::base::ExtCtxt;
-use syntax::parse::token::{Token, DelimToken};
-use syntax::symbol::keywords::Keyword;
-use syntax::symbol::Symbol;
-use syntax::ast::Ident;
-use rustc_errors::DiagnosticBuilder;
-use syntax::parse::parser::Parser;
+use syn::parse::{ident, path};
+use syn::{Ident, Path};
 use std::collections::HashMap;
-use syntax::tokenstream::TokenStream;
-use syntax::ext::quote::rt::ToTokens;
 use NodeChildType;
 use Node;
 use NodeChild;
 use ParsedData;
 
-struct MyKeyword {
-    #[allow(dead_code)]
-    ident: Ident,
-}
+named!(parse -> Vec<(Ident, Option<Path>, Option<Ident>, Vec<(Ident, NodeChildType, Ident)>)>,
+    terminated_list!(punct!(","), tuple!(
+        ident,
+        option!(delimited!(punct!("<"), path, punct!(">"))),
+        option!(do_parse!(
+            punct!(":") >>
+            name: ident >>
+            (name)
+        )),
+        opt_vec!(delimited!(
+            punct!("{"),
+            terminated_list!(punct!(","), do_parse!(
+                name: ident >>
+                punct!(":") >>
+                field_ty: alt!(
+                    keyword!("mul") => {|_| NodeChildType::Multi}
+                    |
+                    keyword!("opt") => {|_| NodeChildType::Optional}
+                    |
+                    epsilon!() => {|_| NodeChildType::Single}
+                ) >>
+                ty_name: ident >>
+                (name, field_ty, ty_name)
+            )),
+            punct!("}")
+        ))
+    ))
+);
 
-fn mk_keyword(s: &str) -> Keyword {
-    let kw = MyKeyword { ident: Ident::with_empty_ctxt(Symbol::intern(s)) };
-    unsafe { ::std::mem::transmute(kw) }
-}
-
-lazy_static! {
-    static ref KW_MUL: Keyword = mk_keyword("mul");
-    static ref KW_OPT: Keyword = mk_keyword("opt");
-}
-
-fn comma_delimiter<'a>(p: &mut Parser<'a>, t: &Token) -> Result<bool, DiagnosticBuilder<'a>> {
-    if p.eat(&Token::Comma) {
-        if p.check(t) {
-            try!(p.expect(t));
-            return Ok(true);
-        }
-    } else {
-        try!(p.expect(t));
-        return Ok(true);
-    }
-    Ok(false)
-}
-
-
-pub fn parse_nodes<'a>(ctx: &ExtCtxt,
-                       mut p: Parser<'a>)
-                       -> Result<ParsedData, DiagnosticBuilder<'a>> {
-    let mut nodes = Vec::<Node>::new();
-    let mut group_name_to_nodes = HashMap::<String, Vec<Node>>::new();
-
-    loop {
-        let mut groups = Vec::<String>::new();
-        let mut fields = Vec::<NodeChild>::new();
-        let mut params_type = None;
-
-        let name = try!(p.parse_ident()).name.to_string();
-
-        if p.eat(&Token::Lt) {
-            let ty = try!(p.parse_ty());
-            let ts = TokenStream::from_tts(ty.to_tokens(ctx));
-            params_type = Some(ts.to_string());
-            try!(p.expect(&Token::Gt));
-        }
-
-        if p.eat(&Token::Colon) {
-            loop {
-                let group = try!(p.parse_ident());
-                groups.push(group.name.to_string());
-
-                if try!(comma_delimiter(&mut p, &Token::OpenDelim(DelimToken::Brace))) {
-                    break;
+pub fn parse_nodes(input: &str) -> ParsedData {
+    let mut nodes = Vec::new();
+    let mut group_name_to_nodes = HashMap::new();
+    for (name, params_type, group, fields) in parse(input).expect("unable to parse vtree-nodes") {
+        let fields = fields
+            .into_iter()
+            .map(|(f_name, f_ty, f_group)| {
+                NodeChild {
+                    name: f_name,
+                    group: f_group,
+                    child_type: f_ty,
                 }
-            }
-        } else {
-            try!(p.expect(&Token::OpenDelim(DelimToken::Brace)));
-        }
-
-        loop {
-            if p.eat(&Token::CloseDelim(DelimToken::Brace)) {
-                // empty braces
-                break;
-            }
-            let mut child_type = NodeChildType::Single;
-
-            let field_name = try!(p.parse_ident()).name.to_string();
-            try!(p.expect(&Token::Colon));
-
-            if p.eat_keyword(*KW_OPT) {
-                child_type = NodeChildType::Optional;
-            } else if p.eat_keyword(*KW_MUL) {
-                child_type = NodeChildType::Multi;
-            }
-
-            let field_type = try!(p.parse_ident()).name.to_string();
-
-            fields.push(NodeChild {
-                name: field_name,
-                group: field_type,
-                child_type: child_type,
-            });
-
-            if try!(comma_delimiter(&mut p, &Token::CloseDelim(DelimToken::Brace))) {
-                break;
-            }
-        }
-
+            })
+            .collect();
         let node = Node {
-            name: name.clone(),
+            name: name,
             params_type: params_type,
             fields: fields,
         };
-
-        for group in groups {
+        if let Some(group) = group {
             group_name_to_nodes.entry(group).or_insert_with(|| Vec::new()).push(node.clone());
         }
-
         nodes.push(node);
-
-        if try!(comma_delimiter(&mut p, &Token::Eof)) {
-            break;
-        }
     }
-
-    Ok(ParsedData {
+    ParsedData {
         nodes: nodes,
         group_name_to_nodes: group_name_to_nodes,
-    })
+    }
 }
