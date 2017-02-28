@@ -250,21 +250,9 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
                                     differ,
                                 ),
                             (&Some(ref curr_child), None) =>
-                                differ.diff(
-                                    &curr_path,
-                                    Diff::Added {
-                                        index: 0,
-                                        curr: curr_child,
-                                    }
-                                ),
+                                differ.diff_added(&curr_path, 0, curr_child),
                             (None, &Some(ref last_child)) =>
-                                differ.diff(
-                                    &curr_path,
-                                    Diff::Removed {
-                                        index: 0,
-                                        last: last_child,
-                                    }
-                                ),
+                                differ.diff_removed(&curr_path, 0, last_child),
                             (None, None) => {}
                         }
                     }
@@ -272,48 +260,27 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
                 NodeChildType::Multi => {
                     quote!{
                         let curr_path = path.add_field(#name_field_str);
-                        for diff in curr_node.#name_field.diff(&last_node.#name_field) {
-                            match diff {
-                                MultiDiff::Node(key, index, curr_child, last_child) => {
-                                    match (curr_child, last_child) {
-                                        (Some(curr_child), Some(last_child)) =>
-                                            AllNodes::diff(
-                                                curr_child,
-                                                last_child,
-                                                &curr_path.add_key(key.clone()),
-                                                index,
-                                                ctx,
-                                                differ,
-                                            ),
-                                        (Some(curr_child), None) =>
-                                            differ.diff(
-                                                &curr_path.add_key(key.clone()),
-                                                Diff::Added {
-                                                    index: index,
-                                                    curr: curr_child,
-                                                }
-                                            ),
-                                        (None, Some(last_child)) =>
-                                            differ.diff(
-                                                &curr_path.add_key(key.clone()),
-                                                Diff::Removed {
-                                                    index: index,
-                                                    last: last_child,
-                                                }
-                                            ),
-                                        (None, None) => unreachable!(),
-                                    }
-                                }
-                                MultiDiff::Reordered(indices) => {
-                                    differ.diff(
-                                        &curr_path,
-                                        Diff::Reordered {
-                                            indices: indices,
-                                        }
-                                    );
-                                }
+                        for (key, index, curr_child, last_child) in curr_node.#name_field.diff(&last_node.#name_field) {
+                            match (curr_child, last_child) {
+                                (Some(curr_child), Some(last_child)) =>
+                                    AllNodes::diff(
+                                        curr_child,
+                                        last_child,
+                                        &curr_path.add_key(key.clone()),
+                                        index,
+                                        ctx,
+                                        differ,
+                                    ),
+                                (Some(curr_child), None) =>
+                                    differ.diff_added(&curr_path.add_key(key.clone()), index, curr_child),
+                                (None, Some(last_child)) =>
+                                    differ.diff_removed(&curr_path.add_key(key.clone()), index, last_child),
+                                (None, None) => unreachable!(),
                             }
                         }
+
+                        let reordered = curr_node.#name_field.diff_reordered(&last_node.#name_field);
+                        differ.diff_reordered(&curr_path, reordered);
                     }
                 }
             }
@@ -323,13 +290,7 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
 
         let maybe_params_cmp = node.params_type.as_ref().map(|_| quote!{
             if curr_node.params != last_node.params {
-                differ.diff(
-                    path,
-                    Diff::ParamsChanged {
-                        curr: curr,
-                        last: last,
-                    }
-                );
+                differ.diff_params_changed(path, curr, last);
             }
         });
 
@@ -348,32 +309,22 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
                 &AllNodes::#node_name(..),
                 _
             ) => {
-                differ.diff(
-                    path,
-                    Diff::Replaced {
-                        index: index,
-                        curr: curr,
-                        last: last,
-                    }
-                );
+                differ.diff_replaced(path, index, curr, last);
             }
         }
     });
 
     quote!{
-        pub fn diff<'a, D>(
-            curr: &'a AllNodes,
-            last: &'a AllNodes,
+        pub fn diff<D>(
+            curr: &AllNodes,
+            last: &AllNodes,
             path: &::vtree::diff::Path,
             index: usize,
             ctx: &::vtree::diff::Context<AllNodes>,
-            differ: &'a D,
+            differ: &D,
         )
-            where D: ::vtree::diff::Differ<'a, AllNodes>
+            where D: ::vtree::diff::Differ<AllNodes>
         {
-            use ::vtree::diff::Diff;
-            use ::vtree::child::MultiDiff;
-
             match (curr, last) {
                 (&AllNodes::Widget(_), _) => panic!("curr isn't allowed to be a AllNodes::Widget in diff"),
                 (_, &AllNodes::Widget(_)) => panic!("last isn't allowed to be a AllNodes::Widget in diff"),

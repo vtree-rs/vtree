@@ -86,12 +86,6 @@ impl<G, AN> From<G> for Option<G, AN>
     }
 }
 
-
-pub enum MultiDiff<'a, AN: 'a> {
-    Node(&'a Key, usize, StdOption<&'a AN>, StdOption<&'a AN>),
-    Reordered(Vec<(usize, usize)>),
-}
-
 #[derive(Debug, Clone)]
 pub struct Multi<G, AN>
     where G: Into<AN>
@@ -160,14 +154,14 @@ impl<G, AN> Multi<G, AN>
 
     pub fn diff<'a>(&'a self,
                     last: &'a Multi<G, AN>)
-                    -> impl Iterator<Item = MultiDiff<'a, AN>> + 'a {
+                    -> impl Iterator<Item = (&'a Key, usize, StdOption<&'a AN>, StdOption<&'a AN>)> + 'a {
         last.ordered
             .iter()
             .enumerate()
             .filter_map(move |(i, k)| {
                 if !self.nodes.contains_key(k) {
                     // removed
-                    Some(MultiDiff::Node(k, i, None, Some(last.nodes.get(k).unwrap())))
+                    Some((k, i, None, Some(last.nodes.get(k).unwrap())))
                 } else {
                     None
                 }
@@ -175,19 +169,33 @@ impl<G, AN> Multi<G, AN>
             .chain(self.ordered.iter().enumerate().map(move |(i, k)| {
                 let n_cur = self.nodes.get(k).unwrap();
                 // unchanged or added
-                MultiDiff::Node(k, i, Some(n_cur), last.nodes.get(k))
+                (k, i, Some(n_cur), last.nodes.get(k))
             }))
-            .chain(self.ordered.iter().enumerate().filter_map(move |(i, k)| {
-                if let Some(i_last) = last.ordered.iter().position(|k_last| k == k_last) {
-                    if i != i_last {
-                        Some(MultiDiff::Reordered(vec![(i, i_last)]))
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            }))
+    }
+
+    pub fn diff_reordered<'a>(&'a self,
+                    last: &'a Multi<G, AN>)
+                    -> impl Iterator<Item = (usize, usize)> + 'a {
+        // TODO: + index to self.nodes
+        let index_lookup: HashMap<_, _> = self.ordered
+            .iter()
+            .enumerate()
+            .filter(|&(_, key)| !last.nodes.contains_key(key))
+            .map(|(index, key)| (key, index))
+            .collect();
+        let curr_it = self.ordered
+            .iter()
+            .filter(move |key| !last.nodes.contains_key(key));
+        let last_it = last.ordered
+            .iter()
+            .enumerate()
+            .filter(move |&(_, key)| self.nodes.contains_key(key));
+        curr_it.zip(last_it).filter_map(move |(c_key, (l_index, l_key))| {
+            if c_key == l_key {
+                return None;
+            }
+            Some((l_index, *index_lookup.get(c_key).unwrap()))
+        })
     }
 }
 

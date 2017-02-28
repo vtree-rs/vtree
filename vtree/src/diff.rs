@@ -88,32 +88,12 @@ impl fmt::Display for Path {
     }
 }
 
-#[derive(Debug)]
-pub enum Diff<'an, AN: 'an> {
-    Added {
-        index: usize,
-        curr: &'an AN,
-    },
-    Removed {
-        index: usize,
-        last: &'an AN,
-    },
-    Replaced {
-        index: usize,
-        curr: &'an AN,
-        last: &'an AN,
-    },
-    ParamsChanged {
-        curr: &'an AN,
-        last: &'an AN,
-    },
-    Reordered {
-        indices: Vec<(usize, usize)>,
-    },
-}
-
-pub trait Differ<'an, AN>: Debug {
-    fn diff(&'an self, &Path, diff: Diff<'an, AN>);
+pub trait Differ<AN>: Debug {
+    fn diff_added(&self, &Path, index: usize, curr: &AN);
+    fn diff_removed(&self, &Path, index: usize, last: &AN);
+    fn diff_replaced(&self, &Path, index: usize, curr: &AN, last: &AN);
+    fn diff_params_changed(&self, &Path, curr: &AN, last: &AN);
+    fn diff_reordered<I: Iterator<Item=(usize, usize)>>(&self, &Path, indices: I);
 }
 
 #[derive(Debug)]
