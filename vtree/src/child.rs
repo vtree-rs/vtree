@@ -180,22 +180,22 @@ impl<G, AN> Multi<G, AN>
         let index_lookup: HashMap<_, _> = self.ordered
             .iter()
             .enumerate()
-            .filter(|&(_, key)| !last.nodes.contains_key(key))
+            .filter(|&(_, key)| last.nodes.contains_key(key))
             .map(|(index, key)| (key, index))
             .collect();
         let curr_it = self.ordered
             .iter()
-            .filter(move |key| !last.nodes.contains_key(key));
+            .filter(move |key| last.nodes.contains_key(key));
         let last_it = last.ordered
             .iter()
             .enumerate()
             .filter(move |&(_, key)| self.nodes.contains_key(key));
-        curr_it.zip(last_it).filter_map(move |(c_key, (l_index, l_key))| {
-            if c_key == l_key {
-                return None;
-            }
-            Some((l_index, *index_lookup.get(c_key).unwrap()))
-        })
+        curr_it
+            .zip(last_it)
+            .filter(|(c_key, (_, l_key))| c_key != l_key)
+            .map(move |(_, (l_index, l_key))| {
+                (*index_lookup.get(l_key).unwrap(), l_index)
+            })
     }
 }
 
