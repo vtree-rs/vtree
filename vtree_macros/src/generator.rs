@@ -84,133 +84,122 @@ fn gen_group_def(group: &Ident, nodes: &[Node]) -> Tokens {
 fn gen_all_nodes_impl_expand_widgets(pd: &ParsedData) -> Tokens {
     let variants = pd.nodes.iter().map(|node| {
         let node_name = &node.name;
+
         if node.fields.is_empty() {
             return quote!{
-                AllNodes::#node_name(curr_node) => AllNodes::#node_name(curr_node),
+                (&mut AllNodes::#node_name(..), _) => {}
             };
         }
 
-        let fields_then = node.fields.iter().map(|field| {
+        let fields_last_some = node.fields.iter().map(|field| {
             let name_field_str = field.name.as_ref();
             let name_field = &field.name;
-            let field_name_local = Ident::from(format!("child_{}", field.name));
             match field.child_type {
                 NodeChildType::Single => {
                     quote!{
                         let path_field = path.add_field(#name_field_str);
-                        #field_name_local = #field_name_local.expand_widgets(last_node.#name_field, &path_field);
+                        AllNodes::expand_widgets(
+                            curr_node.#name_field,
+                            last_node.#name_field,
+                            &path_field
+                        );
                     }
                 }
                 NodeChildType::Optional => {
                     quote!{
                         let path_field = path.add_field(#name_field_str);
-                        #field_name_local = if let Some(field) = #field_name_local {
-                            field.expand_widgets(last_node.#name_field, &path_field);
-                        };
+                        if let Some(field) = curr_node.#name_field {
+                            AllNodes::expand_widgets(field, last_node.#name_field, &path_field);
+                        }
                     }
                 }
                 NodeChildType::Multi => {
                     quote!{
                         let path_field = path.add_field(#name_field_str);
-                        #field_name_local.inplace_map(|key, node| {
-                            node.expand_widgets(
+                        for (key, node) in curr_node.#name_field.iter_mut() {
+                            AllNodes::expand_widgets(
+                                node,
                                 last_node.#name_field.get_by_key(key),
                                 &path_field.add_key(key.clone())
-                            )
-                        });
+                            );
+                        }
                     }
                 }
             }
         });
 
-        let fields_else = node.fields.iter().map(|field| {
+        let fields_last_none = node.fields.iter().map(|field| {
             let name_field_str = field.name.as_ref();
-            let field_name_local = Ident::from(format!("child_{}", field.name));
+            let name_field = &field.name;
             match field.child_type {
                 NodeChildType::Single => {
                     quote!{
                         let path_field = path.add_field(#name_field_str);
-                        #field_name_local = #field_name_local.expand_widgets(None, &path_field);
+                        AllNodes::expand_widgets(curr_node.#name_field, None, &path_field);
                     }
                 }
                 NodeChildType::Optional => {
                     quote!{
                         let path_field = path.add_field(#name_field_str);
-                        #field_name_local = if let Some(field) = #field_name_local {
-                            field.expand_widgets(None, &path_field);
-                        };
+                        if let Some(ref mut field) = curr_node.#name_field {
+                            AllNodes::expand_widgets(field, None, &path_field);
+                        }
                     }
                 }
                 NodeChildType::Multi => {
                     quote!{
                         let path_field = path.add_field(#name_field_str);
-                        #field_name_local.inplace_map(|key, node| {
-                            node.expand_widgets(None, &path_field.add_key(key.clone()))
-                        });
+                        for (key, node) in curr_node.#name_field.iter_mut() {
+                            AllNodes::expand_widgets(node, None, &path_field.add_key(key.clone()));
+                        }
                     }
                 }
-            }
-        });
-
-        let destruct_fields = node.fields.iter().map(|field| {
-            let field_name = &field.name;
-            let field_name_local = Ident::from(format!("child_{}", field.name));
-            quote!{
-                #field_name: mut #field_name_local
-            }
-        });
-        let construct_fields = node.fields.iter().map(|field| {
-            let field_name = &field.name;
-            let field_name_local = Ident::from(format!("child_{}", field.name));
-            quote!{
-                #field_name: #field_name_local
-            }
-        });
-        let de_con_struct_params = node.params_type.as_ref().map(|_| {
-            quote!{
-                params: curr_params,
             }
         });
 
         quote!{
-            AllNodes::#node_name(#node_name{#(#destruct_fields,)* #de_con_struct_params}) => {
-                if let Some(&AllNodes::#node_name(ref last_node)) = last {
-                    #(#fields_then)*
-                } else {
-                    #(#fields_else)*
-                }
-                AllNodes::#node_name(#node_name{
-                    #(#construct_fields,)*
-                    #de_con_struct_params
-                })
-            },
+            (
+                &mut AllNodes::#node_name(ref mut curr_node),
+                Some(&AllNodes::#node_name(ref last_node))
+            ) => {
+                #(#fields_last_some)*
+            }
+            (
+                &mut AllNodes::#node_name(ref mut curr_node),
+                _
+            ) => {
+                #(#fields_last_none)*
+            }
         }
     });
 
     quote!{
         pub fn expand_widgets(
-            self,
+            curr: &mut AllNodes,
             last: ::std::option::Option<&AllNodes>,
             path: &::vtree::diff::Path
-        ) -> AllNodes {
-            let curr = if let AllNodes::Widget(widget_data) = self {
+        ) {
+            if let &mut AllNodes::Widget(..) = curr {
+                let null_widget =
+                    AllNodes::Widget(::std::boxed::Box::new(::vtree::widget::NullWidgetData));
+                let widget_data = match ::std::mem::replace(curr, null_widget) {
+                    AllNodes::Widget(widget_data) => widget_data,
+                    _ => unreachable!(),
+                };
                 match widget_data.render() {
-                    Some(result) => result,
+                    Some(result) => {
+                        ::std::mem::replace(curr, result);
+                    }
                     None => {
-                        let last = last.unwrap();
-                        if let &AllNodes::Widget(..) = last {
-                            panic!("Widgets not allowed in last in `{}`", path);
-                        }
-                        return last.clone();
+                        ::std::mem::replace(curr, last.unwrap().clone());
+                        return;
                     }
                 }
-            } else {
-                self
-            };
+            }
 
-            match curr {
+            match (curr, last) {
                 #(#variants)*
-                AllNodes::Widget(_) => unreachable!(),
+                (&mut AllNodes::Widget(_), _) => unreachable!(),
             }
         }
     }
@@ -260,7 +249,8 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
                 NodeChildType::Multi => {
                     quote!{
                         let curr_path = path.add_field(#name_field_str);
-                        for (key, index, curr_child, last_child) in curr_node.#name_field.diff(&last_node.#name_field) {
+                        let field_diff = curr_node.#name_field.diff(&last_node.#name_field);
+                        for (key, index, curr_child, last_child) in field_diff {
                             match (curr_child, last_child) {
                                 (Some(curr_child), Some(last_child)) =>
                                     AllNodes::diff(
@@ -363,7 +353,7 @@ fn gen_all_nodes_impl_visit_variants<'a>(pd: &'a ParsedData, is_enter: bool) -> 
                 NodeChildType::Multi => {
                     quote!{
                         let curr_path = path.add_field(#name_field_str);
-                        let it = curr_node.#name_field.iter_ordered().enumerate();
+                        let it = curr_node.#name_field.iter().enumerate();
                         for (index, (key, node)) in it {
                             node.#name_visit(&curr_path.add_key(key.clone()), index, f);
                         }

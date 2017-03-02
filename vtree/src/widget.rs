@@ -38,3 +38,19 @@ pub trait Widget: Debug + Clone {
     fn new() -> Self;
     fn render(&self, Self::Input) -> Option<Self::Output>;
 }
+
+
+#[derive(Debug, Clone)]
+pub struct NullWidgetData;
+
+impl<O> WidgetDataTrait<O> for NullWidgetData
+    where O: Debug + Clone
+{
+    fn render(self: Box<Self>) -> Option<O> {
+        panic!("rendering NullWidgetData");
+    }
+
+    fn clone_box(&self) -> Box<WidgetDataTrait<O>> {
+        Box::new((*self).clone())
+    }
+}

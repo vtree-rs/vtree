@@ -3,6 +3,7 @@ name = "vtree"
 version = "0.0.0"
 
 [dependencies]
+ordermap = "0.2.7"
 
 [lib]
 crate-type = ["rlib"]

@@ -1,5 +1,5 @@
 use std::marker::PhantomData;
-use std::collections::HashMap;
+use ordermap::OrderMap;
 use std::convert::{From, Into};
 use std::ops::Deref;
 use key::Key;
@@ -90,8 +90,7 @@ impl<G, AN> From<G> for Option<G, AN>
 pub struct Multi<G, AN>
     where G: Into<AN>
 {
-    ordered: Vec<Key>,
-    nodes: HashMap<Key, AN>,
+    nodes: OrderMap<Key, AN>,
     pd: PhantomData<G>,
 }
 
@@ -100,16 +99,14 @@ impl<G, AN> Multi<G, AN>
 {
     pub fn new() -> Multi<G, AN> {
         Multi {
-            ordered: Vec::new(),
-            nodes: HashMap::new(),
+            nodes: OrderMap::new(),
             pd: PhantomData,
         }
     }
 
     pub fn with_capacity(cap: usize) -> Multi<G, AN> {
         Multi {
-            ordered: Vec::with_capacity(cap),
-            nodes: HashMap::with_capacity(cap),
+            nodes: OrderMap::with_capacity(cap),
             pd: PhantomData,
         }
     }
@@ -118,83 +115,58 @@ impl<G, AN> Multi<G, AN>
         self.nodes.get(key)
     }
 
-    pub fn get_by_index(&self, index: usize) -> StdOption<&AN> {
-        let key = self.ordered.get(index);
-        if let Some(ref key) = key {
-            self.nodes.get(key)
-        } else {
-            None
-        }
-    }
-
     pub fn push(&mut self, key: Key, node: G) {
-        if self.nodes.insert(key.clone(), node.into()).is_some() {
-            panic!("multiple nodes using same key \"{}\"", key);
-        }
-        self.ordered.push(key);
-    }
-
-    pub fn inplace_map<F>(&mut self, func: F)
-        where F: Fn(&Key, AN) -> AN
-    {
-        for key in self.ordered.iter() {
-            let node = self.nodes.remove(key).unwrap();
-            let node = func(key, node);
-            self.nodes.insert(key.clone(), node);
-        }
-    }
-
-    pub fn iter_ordered<'a>(&'a self) -> impl Iterator<Item = (&'a Key, &'a AN)> + 'a {
-        self.ordered.iter().map(move |key| (key, self.nodes.get(key).unwrap()))
+        use ::ordermap::Entry;
+        match self.nodes.entry(key) {
+            Entry::Occupied(e) => panic!("multiple nodes using same key `{}`", e.key()),
+            Entry::Vacant(e) => e.insert(node.into()),
+        };
     }
 
     pub fn iter<'a>(&'a self) -> impl Iterator<Item = (&'a Key, &'a AN)> + 'a {
         self.nodes.iter()
     }
 
+    pub fn iter_mut<'a>(&'a mut self) -> impl Iterator<Item = (&'a Key, &'a mut AN)> + 'a {
+        self.nodes.iter_mut()
+    }
+
     pub fn diff<'a>(&'a self,
                     last: &'a Multi<G, AN>)
                     -> impl Iterator<Item = (&'a Key, usize, StdOption<&'a AN>, StdOption<&'a AN>)> + 'a {
-        last.ordered
+        last.nodes
             .iter()
             .enumerate()
-            .filter_map(move |(i, k)| {
+            .filter_map(move |(i, (k, n))| {
                 if !self.nodes.contains_key(k) {
                     // removed
-                    Some((k, i, None, Some(last.nodes.get(k).unwrap())))
+                    Some((k, i, None, Some(n)))
                 } else {
                     None
                 }
             })
-            .chain(self.ordered.iter().enumerate().map(move |(i, k)| {
-                let n_cur = self.nodes.get(k).unwrap();
+            .chain(self.nodes.iter().enumerate().map(move |(i, (k, n))| {
                 // unchanged or added
-                (k, i, Some(n_cur), last.nodes.get(k))
+                (k, i, Some(n), last.nodes.get(k))
             }))
     }
 
     pub fn diff_reordered<'a>(&'a self,
                     last: &'a Multi<G, AN>)
                     -> impl Iterator<Item = (usize, usize)> + 'a {
-        // TODO: + index to self.nodes
-        let index_lookup: HashMap<_, _> = self.ordered
-            .iter()
-            .enumerate()
-            .filter(|&(_, key)| last.nodes.contains_key(key))
-            .map(|(index, key)| (key, index))
-            .collect();
-        let curr_it = self.ordered
-            .iter()
+        let curr_it = self.nodes
+            .keys()
             .filter(move |key| last.nodes.contains_key(key));
-        let last_it = last.ordered
-            .iter()
+        let last_it = last.nodes
+            .keys()
             .enumerate()
             .filter(move |&(_, key)| self.nodes.contains_key(key));
         curr_it
             .zip(last_it)
-            .filter(|(c_key, (_, l_key))| c_key != l_key)
+            .filter(|&(ref c_key, (_, ref l_key))| c_key != l_key)
             .map(move |(_, (l_index, l_key))| {
-                (*index_lookup.get(l_key).unwrap(), l_index)
+                let c_index = self.nodes.get_pair_index(l_key).unwrap().0;
+                (c_index, l_index)
             })
     }
 }
