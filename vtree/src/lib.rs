@@ -1,4 +1,5 @@
 #![feature(conservative_impl_trait)]
+#![feature(specialization)]
 
 extern crate ordermap;
 extern crate itertools;

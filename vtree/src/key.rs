@@ -1,6 +1,7 @@
 use std::fmt::{self, Write};
 use std::rc::Rc;
 use std::convert::{From, Into};
+use std::borrow::Borrow;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Key {
@@ -39,6 +40,12 @@ impl From<String> for Key {
     }
 }
 
+impl From<Rc<String>> for Key {
+    fn from(v: Rc<String>) -> Key {
+        Key::String(v)
+    }
+}
+
 impl From<&'static str> for Key {
     fn from(v: &'static str) -> Key {
         Key::Str(v)
@@ -48,6 +55,21 @@ impl From<&'static str> for Key {
 impl From<Vec<u8>> for Key {
     fn from(v: Vec<u8>) -> Key {
         Key::Bytes(Rc::new(v))
+    }
+}
+
+impl From<Rc<Vec<u8>>> for Key {
+    fn from(v: Rc<Vec<u8>>) -> Key {
+        Key::Bytes(v)
+    }
+}
+
+impl<'a, T, O> From<&'a T> for Key
+    where T: ToOwned<Owned=O> + ?Sized,
+          O: Borrow<T> + Into<Key>
+{
+    default fn from(v: &'a T) -> Key {
+        v.to_owned().into()
     }
 }
 
