@@ -4,6 +4,7 @@ use std::convert::{From, Into};
 use std::ops::Deref;
 use key::Key;
 use std::option::Option as StdOption;
+use itertools::Itertools;
 
 pub struct Single<G, AN>
     where G: Into<AN>
@@ -156,18 +157,22 @@ impl<G, AN> Multi<G, AN>
                     -> impl Iterator<Item = (usize, usize)> + 'a {
         let curr_it = self.nodes
             .keys()
-            .filter(move |key| last.nodes.contains_key(key));
+            .enumerate()
+            .filter(move |&(_, k)| !last.nodes.contains_key(k));
+
         let last_it = last.nodes
             .keys()
-            .enumerate()
-            .filter(move |&(_, key)| self.nodes.contains_key(key));
+            .filter(move |k| self.nodes.contains_key(k))
+            .enumerate();
+
         curr_it
-            .zip(last_it)
-            .filter(|&(ref c_key, (_, ref l_key))| c_key != l_key)
-            .map(move |(_, (l_index, l_key))| {
+            .merge_by(last_it, |a, b| a.0 <= b.0)
+            .enumerate()
+            .map(move |(l_index, (_, l_key))| {
                 let c_index = self.nodes.get_pair_index(l_key).unwrap().0;
                 (c_index, l_index)
             })
+            .filter(|&(c_i, l_i)| c_i != l_i)
     }
 }
 

@@ -3,6 +3,7 @@ name = "vtree"
 version = "0.0.0"
 
 [dependencies]
+itertools = "0.5.9"
 ordermap = "0.2.7"
 
 [lib]
