@@ -1,10 +1,33 @@
 use syn::parse::{ident, path};
 use syn::{Ident, Path};
 use std::collections::HashMap;
-use NodeChildType;
-use Node;
-use NodeChild;
-use ParsedData;
+
+#[derive(Debug, Clone)]
+pub enum NodeChildType {
+    Single,
+    Optional,
+    Multi,
+}
+
+#[derive(Debug, Clone)]
+pub struct NodeChild {
+    pub name: Ident,
+    pub group: Ident,
+    pub child_type: NodeChildType,
+}
+
+#[derive(Debug, Clone)]
+pub struct Node {
+    pub name: Ident,
+    pub params_type: Option<Path>,
+    pub fields: Vec<NodeChild>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ParsedData {
+    pub nodes: Vec<Node>,
+    pub group_name_to_nodes: HashMap<Ident, Vec<Node>>,
+}
 
 named!(parse -> Vec<(Ident, Option<Path>, Option<Ident>, Vec<(Ident, NodeChildType, Ident)>)>,
     terminated_list!(punct!(","), tuple!(

@@ -1,11 +1,7 @@
-use syntax::parse::{ParseSess, filemap_to_tts};
-use syntax::tokenstream::TokenStream;
 use regex::{Regex, Captures};
 use syn::Ident;
 use quote::Tokens;
-use NodeChildType;
-use ParsedData;
-use Node;
+use parser::{ParsedData, NodeChildType, Node};
 use std::iter::once;
 
 fn to_snake_case(s: &str) -> String {
@@ -552,7 +548,7 @@ fn gen_all_nodes_from_group_impls<'a>(pd: &'a ParsedData) -> impl Iterator<Item 
     })
 }
 
-pub fn generate_defs(pd: ParsedData) -> TokenStream {
+pub fn generate_defs(pd: ParsedData) -> String {
     let all_nodes_ident = Ident::new("AllNodes");
     let node_defs = gen_node_defs(&pd);
     let group_defs = pd.group_name_to_nodes
@@ -575,9 +571,5 @@ pub fn generate_defs(pd: ParsedData) -> TokenStream {
         #(#all_nodes_from_group_impls)*
     };
     println!("{}", defs);
-    let source_str = defs.as_str();
-    let sess = ParseSess::new();
-    let filemap =
-        sess.codemap().new_filemap("<procmacro_lex>".to_string(), None, source_str.to_owned());
-    filemap_to_tts(&sess, filemap).into_iter().collect()
+    defs.into_string()
 }
