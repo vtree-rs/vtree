@@ -8,15 +8,17 @@ fn to_snake_case(s: &str) -> String {
     lazy_static! {
         static ref RE: Regex = Regex::new("([a-z]|^)([A-Z])").unwrap();
     }
-    RE.replace_all(s, |caps: &Captures| {
-        let cap1 = caps.at(1).unwrap_or("");
-        let cap2 = caps.at(2).unwrap_or("").to_lowercase();
-        if cap1.len() != 0 {
-            format!("{}_{}", cap1, cap2)
-        } else {
-            cap2
-        }
-    })
+    RE
+        .replace_all(s, |caps: &Captures| {
+            let cap1 = caps.get(1).map_or("", |m| m.as_str());
+            let cap2 = caps.get(2).map_or(String::new(), |m| m.as_str().to_lowercase());
+            if cap1.len() != 0 {
+                format!("{}_{}", cap1, cap2)
+            } else {
+                cap2
+            }
+        })
+        .into_owned()
 }
 
 fn gen_node_defs<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Tokens> + 'a {
