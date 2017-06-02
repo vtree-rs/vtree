@@ -1,8 +1,2 @@
-[package]
-name = "tests"
-version = "0.0.0"
-publish = false
-
-[dependencies]
-vtree = { path = "vtree" }
-vtree_macros = { path = "vtree_macros" }
+[workspace]
+members = ["vtree", "vtree_macros", "vtree_test"]

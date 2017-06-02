@@ -1,11 +1,2 @@
-/vtree/target/
-/vtree/Cargo.lock
-
-/vtree_macros/target/
-/vtree_macros/Cargo.lock
-
-/vtree_test/target/
-/vtree_test/Cargo.lock
-
 /target/
 /Cargo.lock
