@@ -86,11 +86,11 @@ impl fmt::Display for Key {
             &Key::Str(s) => write!(f, "{}", s),
             &Key::Bytes(ref bytes) => {
                 let mut s = String::with_capacity(bytes.len() * 2 + 2);
-                try!(write!(&mut s, "0x"));
+                write!(&mut s, "0x")?;
                 for &b in bytes.iter() {
-                    try!(write!(&mut s, "{:x}", b));
+                    write!(&mut s, "{:x}", b)?;
                 }
-                write!(f, "{}", s)
+                f.write_str(s.as_ref())
             }
         }
     }

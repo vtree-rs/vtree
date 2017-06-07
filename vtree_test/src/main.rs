@@ -1,91 +1,102 @@
 #![feature(plugin)]
-#![plugin(vtree_macros)]
+#![feature(proc_macro)]
 
 extern crate vtree;
+extern crate vtree_macros;
 
-use vtree::key::{Key, key, KeyedDiff, KeyedNodes};
+use vtree::key::{Key, key};
 use vtree::widget::{Widget, WidgetData};
-use vtree::diff::{self, Diff, Context};
+use vtree::diff::{self, Context, Differ, Path};
+use vtree_macros::define_nodes;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AParams {
     s: String,
 }
 
-define_nodes!(
+define_nodes!{
     A<AParams>: GroupA {
         child: mul GroupA,
     },
-);
-
-#[derive(Debug, Clone)]
-struct GroupAWidget;
-impl Widget for GroupAWidget {
-    type Input = String;
-    type Output = GroupA;
-
-    fn new() -> Self {
-        GroupAWidget
-    }
-
-    fn render(&self, i: Self::Input) -> Option<Self::Output> {
-        Some(a(AParams { s: i }, KeyedNodes::new()))
-    }
+    Text<String>: GroupA,
 }
 
+// #[derive(Debug, Clone)]
+// struct GroupAWidget;
+// impl Widget for GroupAWidget {
+//     type Input = String;
+//     type Output = GroupA;
+//
+//     fn new() -> Self {
+//         GroupAWidget
+//     }
+//
+//     fn render(&self, i: Self::Input) -> Option<GroupA> {
+//         Some(a(AParams { s: i }, &[]))
+//     }
+// }
+
+#[derive(Debug)]
 struct MyDiffer;
-impl Differ for MyDiffer {
-    fn diff_group_a<'a>(&self, path: &diff::Path, curr: &GroupA, diff: diff::Diff) {
-        println!("diff_group_a: `{}`: {:?}", path, diff);
+impl Differ<AllNodes> for MyDiffer {
+    fn diff_added(&self, path: &Path, index: usize, curr: &AllNodes) {
+        println!("diff_added");
     }
 
-    fn reorder_a_child(&self,
-                       path: &diff::Path,
-                       parent: &A,
-                       index_curr: usize,
-                       index_last: usize) {
-        println!("reorder_a_child: `{}`: {} => {}", path, index_last, index_curr);
+    fn diff_removed(&self, path: &Path, index: usize, last: &AllNodes) {
+        println!("diff_removed");
     }
 
-    fn params_changed_a(&self, path: &diff::Path, curr: &A, last: &A) {
-        println!("params_changed_a: `{}`: {:?} => {:?}", path, last.params, curr.params);
+    fn diff_replaced(&self, path: &Path, index: usize, curr: &AllNodes, last: &AllNodes) {
+        println!("diff_replaced");
+    }
+
+    fn diff_params_changed(&self, path: &Path, curr: &AllNodes, last: &AllNodes) {
+        println!("diff_params_changed");
+    }
+
+    fn diff_reordered<I: Iterator<Item=(usize, usize)>>(&self, path: &Path, indices: I) {
+        println!("diff_reordered");
     }
 }
 
 fn main() {
-    let test_a: GroupA = a(
+    let mut test_a: AllNodes = a(
         AParams { s: "node1".to_string() },
-        KeyedNodes::with_data(vec![
-            (
-                key(0),
-                WidgetData::<GroupAWidget>("foo bar".to_string()).into()
-            ),
+        &[
+            // (
+            //     0,
+            //     WidgetData::<GroupAWidget>("foo bar".to_string()).into()
+            // ),
 
             (
-                key(1),
+                1,
                 a(
                     AParams {
                         s: "node2".to_string(),
                     },
-                    KeyedNodes::new()
+                    &[
+                        (1, text("asd"))
+                    ]
                 )
             ),
-        ]),
+        ]
     );
 
-    let test_b: GroupA = a(
+    let mut test_b: AllNodes = a(
         AParams { s: "node2".to_string() },
-        KeyedNodes::with_data(vec![
-            (
-                key(0),
-                WidgetData::<GroupAWidget>("foo bar2".to_string()).into()
-            ),
-        ]),
+        &[
+            (1, text("asd"))
+            // (
+            //     key(0),
+            //     WidgetData::<GroupAWidget>("foo bar2".to_string()).into()
+            // ),
+        ]
     );
 
-    let ctx = Context::new(MyDiffer);
+    let ctx = Context::new();
     let path = diff::Path::new();
-    let test_a = test_a.expand_widgets(None, &path);
-    let test_b = test_b.expand_widgets(Some(&test_a), &path);
-    test_b.diff(&path, &test_a, &ctx);
+    AllNodes::expand_widgets(&mut test_a, None, &path);
+    AllNodes::expand_widgets(&mut test_b, None, &path);
+    AllNodes::diff(&test_b, &test_a, &path, 0, &ctx, &MyDiffer);
 }

@@ -1,4 +1,3 @@
-#![feature(plugin_registrar)]
 #![feature(conservative_impl_trait)]
 #![feature(proc_macro)]
 #![recursion_limit = "128"]

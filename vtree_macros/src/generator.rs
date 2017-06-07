@@ -543,6 +543,7 @@ fn gen_all_nodes_from_group_impls<'a>(pd: &'a ParsedData) -> impl Iterator<Item 
                 fn from(group: #group) -> AllNodes {
                     match group {
                         #(#variants)*
+                        #group::Widget(_) => unimplemented!(),
                     }
                 }
             }
