@@ -4,7 +4,7 @@
 extern crate vtree;
 extern crate vtree_macros;
 
-use vtree::key::{Key, key};
+use vtree::key::Key;
 use vtree::widget::{Widget, WidgetData};
 use vtree::diff::{self, Context, Differ, Path};
 use vtree_macros::define_nodes;
@@ -70,13 +70,13 @@ fn main() {
             // ),
 
             (
-                1,
+                1.into(),
                 a(
                     AParams {
                         s: "node2".to_string(),
                     },
                     &[
-                        (1, text("asd"))
+                        (1.into(), text("asd"))
                     ]
                 )
             ),
@@ -86,9 +86,9 @@ fn main() {
     let mut test_b: AllNodes = a(
         AParams { s: "node2".to_string() },
         &[
-            (1, text("asd"))
+            (1.into(), text("asd"))
             // (
-            //     key(0),
+            //     0.into(),
             //     WidgetData::<GroupAWidget>("foo bar2".to_string()).into()
             // ),
         ]

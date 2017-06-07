@@ -182,24 +182,21 @@ pub trait IntoMultiEntry<G, AN>
     fn into_multi_entry(self) -> (Key, G);
 }
 
-impl <K, G, AN> IntoMultiEntry<G, AN> for (K, G)
-    where K: Into<Key>,
-          G: Into<AN>
+impl <G, AN> IntoMultiEntry<G, AN> for (Key, G)
+    where G: Into<AN>
 {
     fn into_multi_entry(self) -> (Key, G) {
-        (self.0.into(), self.1)
+        self
     }
 }
 
-impl <'a, K, G, AN> IntoMultiEntry<G, AN> for &'a (K, G)
-    where K: 'a + Clone + Into<Key>,
-          G: 'a + Clone + Into<AN>
+impl <'a, G, AN> IntoMultiEntry<G, AN> for &'a (Key, G)
+    where G: Into<AN> + Clone
 {
     fn into_multi_entry(self) -> (Key, G) {
-        (self.0.clone().into(), self.1.clone())
+        (self.0.clone(), self.1.clone())
     }
 }
-
 
 impl <G, AN, IME, I> From<I> for Multi<G, AN>
     where G: Into<AN>,

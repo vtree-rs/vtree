@@ -73,10 +73,6 @@ impl<'a, T, O> From<&'a T> for Key
     }
 }
 
-pub fn key<T: Into<Key>>(key: T) -> Key {
-    key.into()
-}
-
 impl fmt::Display for Key {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
