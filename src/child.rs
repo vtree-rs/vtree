@@ -6,6 +6,7 @@ use key::Key;
 use std::option::Option as StdOption;
 use itertools::Itertools;
 
+#[derive(Debug, Clone)]
 pub struct Single<G, AN>
     where G: Into<AN>
 {
@@ -43,6 +44,7 @@ impl<G, AN> From<G> for Single<G, AN>
 }
 
 
+#[derive(Debug, Clone)]
 pub struct Option<G, AN>
     where G: Into<AN>
 {
