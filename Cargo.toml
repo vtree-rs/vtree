@@ -1,2 +1,10 @@
+[package]
+name = "vtree"
+version = "0.0.0"
+
+[dependencies]
+itertools = "0.6"
+ordermap = "0.2.7"
+
 [workspace]
-members = ["vtree", "vtree_macros", "vtree_test"]
+members = ["vtree_macros", "vtree_test"]

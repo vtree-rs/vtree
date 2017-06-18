@@ -4,5 +4,5 @@ version = "0.0.0"
 publish = false
 
 [dependencies]
-vtree = { path = "../vtree" }
+vtree = { path = ".." }
 vtree_macros = { path = "../vtree_macros" }
