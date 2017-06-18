@@ -47,7 +47,7 @@ fn gen_node_defs<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Tokens> + 'a {
 
         let params_field = node.params_type.as_ref().map(|params| {
             quote!{
-                pub params: #params
+                pub params: #params,
             }
         });
 
@@ -55,7 +55,7 @@ fn gen_node_defs<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Tokens> + 'a {
         quote!{
             #[derive(Debug, Clone)]
             pub struct #name {
-                #params_field,
+                #params_field
                 #(#fields)*
             }
         }
@@ -66,14 +66,14 @@ fn gen_group_def(group: &Ident, nodes: &[Node]) -> Tokens {
     let vars = nodes.iter().map(|node| {
         let node = &node.name;
         quote!{
-            #node(#node)
+            #node(#node),
         }
     });
 
     quote!{
         #[derive(Debug, Clone)]
         pub enum #group {
-            #(#vars,)*
+            #(#vars)*
             Widget(::std::boxed::Box<::vtree::widget::WidgetDataTrait<#group>>),
         }
     }
@@ -97,8 +97,8 @@ fn gen_all_nodes_impl_expand_widgets(pd: &ParsedData) -> Tokens {
                     quote!{
                         let path_field = path.add_field(#name_field_str);
                         AllNodes::expand_widgets(
-                            curr_node.#name_field,
-                            last_node.#name_field,
+                            &mut curr_node.#name_field,
+                            Some(&last_node.#name_field),
                             &path_field
                         );
                     }
@@ -133,7 +133,7 @@ fn gen_all_nodes_impl_expand_widgets(pd: &ParsedData) -> Tokens {
                 NodeChildType::Single => {
                     quote!{
                         let path_field = path.add_field(#name_field_str);
-                        AllNodes::expand_widgets(curr_node.#name_field, None, &path_field);
+                        AllNodes::expand_widgets(&mut curr_node.#name_field, None, &path_field);
                     }
                 }
                 NodeChildType::Optional => {
@@ -337,15 +337,15 @@ fn gen_all_nodes_impl_visit_variants<'a>(pd: &'a ParsedData, is_enter: bool) -> 
                 NodeChildType::Single => {
                     quote!{
                         let curr_path = path.add_field(#name_field_str);
-                        if let Some(field) = &curr_node.#name_field {
-                            field.#name_visit(&curr_path, 0, f);
-                        }
+                        &curr_node.#name_field.#name_visit(&curr_path, 0, f);
                     }
                 }
                 NodeChildType::Optional => {
                     quote!{
                         let curr_path = path.add_field(#name_field_str);
-                        &curr_node.#name_field.#name_visit(&curr_path, 0, f);
+                        if let Some(field) = &curr_node.#name_field {
+                            field.#name_visit(&curr_path, 0, f);
+                        }
                     }
                 }
                 NodeChildType::Multi => {

@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 use ordermap::OrderMap;
 use std::convert::{From, Into};
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use key::Key;
 use std::option::Option as StdOption;
 use itertools::Itertools;
@@ -32,6 +32,14 @@ impl<G, AN> Deref for Single<G, AN>
 
     fn deref(&self) -> &AN {
         &self.node
+    }
+}
+
+impl<G, AN> DerefMut for Single<G, AN>
+    where G: Into<AN>
+{
+    fn deref_mut(&mut self) -> &mut AN {
+        &mut self.node
     }
 }
 
