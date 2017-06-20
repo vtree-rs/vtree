@@ -7,4 +7,4 @@ itertools = "0.6"
 ordermap = "0.2.7"
 
 [workspace]
-members = ["vtree_macros", "vtree_test"]
+members = ["vtree_macros", "vtree_markup", "vtree_test"]
