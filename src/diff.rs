@@ -6,14 +6,8 @@ use std::marker::PhantomData;
 use std::fmt::Debug;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub enum PathNode {
-    Key(Key),
-    Field(&'static str),
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Path {
-    path: Vec<PathNode>,
+    path: Vec<Key>,
 }
 
 impl Path {
@@ -21,15 +15,9 @@ impl Path {
         Path { path: Vec::new() }
     }
 
-    pub fn add_key(&self, k: Key) -> Path {
+    pub fn add(&self, k: Key) -> Path {
         let mut p = self.path.clone();
-        p.push(PathNode::Key(k));
-        Path { path: p }
-    }
-
-    pub fn add_field(&self, n: &'static str) -> Path {
-        let mut p = self.path.clone();
-        p.push(PathNode::Field(n));
+        p.push(k);
         Path { path: p }
     }
 
@@ -43,30 +31,30 @@ impl Path {
     }
 
     pub fn extend<T>(&self, iter: T) -> Path
-        where T: IntoIterator<Item = PathNode>
+        where T: IntoIterator<Item = Key>
     {
         let mut p = self.path.clone();
         p.extend(iter);
         Path { path: p }
     }
 
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item = &'a PathNode> {
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = &'a Key> {
         self.path.iter()
     }
 }
 
 impl IntoIterator for Path {
-    type Item = PathNode;
-    type IntoIter = IntoIter<PathNode>;
+    type Item = Key;
+    type IntoIter = IntoIter<Key>;
 
-    fn into_iter(self) -> IntoIter<PathNode> {
+    fn into_iter(self) -> IntoIter<Key> {
         self.path.into_iter()
     }
 }
 
-impl FromIterator<PathNode> for Path {
+impl FromIterator<Key> for Path {
     fn from_iter<T>(iter: T) -> Self
-        where T: IntoIterator<Item = PathNode>
+        where T: IntoIterator<Item = Key>
     {
         let p: Vec<_> = iter.into_iter().collect();
         Path { path: p }
@@ -76,15 +64,10 @@ impl FromIterator<PathNode> for Path {
 
 impl fmt::Display for Path {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let s = self.path.iter().fold(String::new(), |acc, p| {
-            acc +
-            &match p {
-                &PathNode::Key(ref k) => format!(".{}", k),
-                &PathNode::Field(ref n) => format!("::{}", n),
-            }
-        });
-
-        write!(f, "{}", s)
+        for key in self.path.iter() {
+            write!(f, ".{}", key)?;
+        }
+        Ok(())
     }
 }
 
