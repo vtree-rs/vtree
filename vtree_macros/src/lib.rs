@@ -20,6 +20,9 @@ use proc_macro::TokenStream;
 pub fn define_nodes(input: TokenStream) -> TokenStream {
     let input = input.to_string();
     let pd = parse(&input);
+    for param_ty in pd.normal_nodes().filter_map(|node| node.params_ty.as_ref()) {
+        assert!(param_ty.global, "`{}` is not a global module Path", quote!{#param_ty});
+    }
     println!("{:?}", pd);
     generate_defs(pd).parse().unwrap()
 }
