@@ -7,19 +7,64 @@ extern crate vtree_macros;
 use vtree::key::Key;
 use vtree::widget::{Widget, WidgetData};
 use vtree::diff::{self, Context, Differ, Path};
+use vtree::node;
 use vtree_macros::define_nodes;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct AParams {
     s: String,
 }
 
-define_nodes!{
-    A<AParams>: GroupA {
-        child: mul GroupA,
-    },
-    Text<String>: GroupA,
+impl <PB> node::Params<PB> for AParams
+    where PB: node::BuilderSetter<node::BuilderParams, AParams>
+{
+    type Builder = AParamsBuilder<PB>;
+
+    fn builder(parent_builder: PB) -> AParamsBuilder<PB> {
+        AParamsBuilder {parent_builder: parent_builder}
+    }
 }
+
+pub struct AParamsBuilder<PB> {
+    parent_builder: PB,
+}
+
+impl <PB> AParamsBuilder<PB>
+    where PB: node::BuilderSetter<node::BuilderParams, AParams>
+{
+    pub fn build(self) -> PB {
+        let mut pb = self.parent_builder;
+        pb.builder_set(AParams {s: "test".into()});
+        pb
+    }
+}
+
+// struct A
+// struct Text
+// struct Widget
+//
+// mod children {
+//     enum A {}
+// }
+//
+// mod builders {
+//     struct A
+// }
+
+define_nodes!{
+    nodes {
+        A<::AParams>: mul @Foo,
+        Label: mul Text,
+        B,
+        C,
+    }
+    groups {
+        Bar: A B,
+        Foo: @Bar C,
+    }
+}
+
+use groups::*;
 
 // #[derive(Debug, Clone)]
 // struct GroupAWidget;
@@ -61,38 +106,29 @@ impl Differ<AllNodes> for MyDiffer {
 }
 
 fn main() {
-    let mut test_a: AllNodes = a(
-        AParams { s: "node1".to_string() },
-        &[
-            // (
-            //     0,
-            //     WidgetData::<GroupAWidget>("foo bar".to_string()).into()
-            // ),
-
-            (
+    let mut test_a: AllNodes =
+        A::builder()
+            .set_params(AParams { s: "node1".to_string() })
+            .children()
+            .add(
                 1.into(),
-                a(
-                    AParams {
-                        s: "node2".to_string(),
-                    },
-                    &[
-                        (1.into(), text("asd"))
-                    ]
-                )
-            ),
-        ]
-    );
+                A::builder()
+                    .set_params(AParams { s: "node2".to_string() })
+                    .children()
+                    .add(1.into(), "asd".into())
+                    .build()
+                    .build()
+                    .into()
+            )
+            .build()
+            .build()
+            .into();
 
-    let mut test_b: AllNodes = a(
-        AParams { s: "node2".to_string() },
-        &[
-            (1.into(), text("asd"))
-            // (
-            //     0.into(),
-            //     WidgetData::<GroupAWidget>("foo bar2".to_string()).into()
-            // ),
-        ]
-    );
+    let mut test_b: AllNodes =
+        A::builder()
+            .set_params(AParams { s: "node2".to_string() })
+            .build()
+            .into();
 
     let ctx = Context::new();
     let path = diff::Path::new();

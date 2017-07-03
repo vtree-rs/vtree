@@ -3,6 +3,7 @@ use ordermap::OrderMap;
 use std::convert::{From, Into};
 use std::ops::{Deref, DerefMut};
 use key::Key;
+use node;
 use std::option::Option as StdOption;
 use itertools::Itertools;
 
@@ -71,6 +72,17 @@ impl<G, AN> Option<G, AN>
     }
 }
 
+impl <G, AN> Default for Option<G, AN>
+    where G: Into<AN>
+{
+    fn default() -> Option<G, AN> {
+        Option {
+            node: None,
+            pd: PhantomData,
+        }
+    }
+}
+
 impl<G, AN> Deref for Option<G, AN>
     where G: Into<AN>
 {
@@ -109,10 +121,7 @@ impl<G, AN> Multi<G, AN>
     where G: Into<AN>
 {
     pub fn new() -> Multi<G, AN> {
-        Multi {
-            nodes: OrderMap::new(),
-            pd: PhantomData,
-        }
+        Multi::default()
     }
 
     pub fn with_capacity(cap: usize) -> Multi<G, AN> {
@@ -186,6 +195,17 @@ impl<G, AN> Multi<G, AN>
     }
 }
 
+impl <G, AN> Default for Multi<G, AN>
+    where G: Into<AN>
+{
+    fn default() -> Multi<G, AN> {
+        Multi {
+            nodes: OrderMap::new(),
+            pd: PhantomData,
+        }
+    }
+}
+
 pub trait IntoMultiEntry<G, AN>
     where G: Into<AN>
 {
@@ -221,5 +241,103 @@ impl <G, AN, IME, I> From<I> for Multi<G, AN>
             multi.push(e.0, e.1);
         }
         multi
+    }
+}
+
+
+pub struct SingleBuilder<PB, G, AN>
+    where PB: node::BuilderSetter<node::BuilderChild, Single<G, AN>>,
+          G: Into<AN>
+{
+    parent_builder: PB,
+    child: StdOption<Single<G, AN>>,
+}
+
+impl <PB, G, AN> SingleBuilder<PB, G, AN>
+    where PB: node::BuilderSetter<node::BuilderChild, Single<G, AN>>,
+          G: Into<AN>
+{
+    pub fn new(parent_builder: PB) -> SingleBuilder<PB, G, AN> {
+        SingleBuilder {
+            parent_builder: parent_builder,
+            child: None,
+        }
+    }
+
+    pub fn add(mut self, _key: Key, child: G) -> SingleBuilder<PB, G, AN> {
+        assert!(self.child.is_none(), "Child already set");
+        self.child = Some(Single::new(child));
+        self
+    }
+
+    pub fn build(self) -> PB {
+        let mut pb = self.parent_builder;
+        if let Some(child) = self.child {
+            pb.builder_set(child);
+        }
+        pb
+    }
+}
+
+
+pub struct OptionBuilder<PB, G, AN>
+    where PB: node::BuilderSetter<node::BuilderChild, Option<G, AN>>,
+          G: Into<AN>
+{
+    parent_builder: PB,
+    child: Option<G, AN>,
+}
+
+impl <PB, G, AN> OptionBuilder<PB, G, AN>
+    where PB: node::BuilderSetter<node::BuilderChild, Option<G, AN>>,
+          G: Into<AN>
+{
+    pub fn new(parent_builder: PB) -> OptionBuilder<PB, G, AN> {
+        OptionBuilder {
+            parent_builder: parent_builder,
+            child: Option::new(None),
+        }
+    }
+
+    pub fn add(mut self, _key: Key, child: G) -> OptionBuilder<PB, G, AN> {
+        assert!(self.child.is_none(), "Child already set");
+        self.child = Option::new(Some(child));
+        self
+    }
+
+    pub fn build(mut self) -> PB {
+        self.parent_builder.builder_set(self.child);
+        self.parent_builder
+    }
+}
+
+
+pub struct MultiBuilder<PB, G, AN>
+    where PB: node::BuilderSetter<node::BuilderChild, Multi<G, AN>>,
+          G: Into<AN>
+{
+    parent_builder: PB,
+    child: Multi<G, AN>,
+}
+
+impl <PB, G, AN> MultiBuilder<PB, G, AN>
+    where PB: node::BuilderSetter<node::BuilderChild, Multi<G, AN>>,
+          G: Into<AN>
+{
+    pub fn new(parent_builder: PB) -> MultiBuilder<PB, G, AN> {
+        MultiBuilder {
+            parent_builder: parent_builder,
+            child: Multi::new(),
+        }
+    }
+
+    pub fn add(mut self, key: Key, child: G) -> MultiBuilder<PB, G, AN> {
+        self.child.push(key, child);
+        self
+    }
+
+    pub fn build(mut self) -> PB {
+        self.parent_builder.builder_set(self.child);
+        self.parent_builder
     }
 }
