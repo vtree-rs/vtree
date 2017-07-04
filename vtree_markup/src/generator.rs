@@ -1,4 +1,4 @@
-use parser::{Node, TextValue, Value};
+use parser::{Node, TextValue, Value, Params};
 use quote::{Tokens, Ident};
 
 fn render_param_value(val: &Value) -> Tokens {
@@ -33,22 +33,32 @@ pub fn render_node(node: Node) -> Tokens {
         Node::Node {name, params, children, ..} => {
             let name = Ident::new(name);
 
-            let maybe_params = if params.is_empty() {
-                None
-            } else {
-                let params = params.into_iter().map(|(key, val)| {
-                    let set_key = Ident::new(format!("set_{}", key));
-                    let val = render_param_value(&val);
-                    quote!{
-                        .#set_key(#val.into())
-                    }
-                });
+            let maybe_params = match params {
+                Params::KeyValue(kvs) => {
+                    if kvs.is_empty() {
+                        None
+                    } else {
+                        let kvs = kvs.into_iter().map(|(key, val)| {
+                            let set_key = Ident::new(format!("set_{}", key));
+                            let val = render_param_value(&val);
+                            quote!{
+                                .#set_key(#val.into())
+                            }
+                        });
 
-                Some(quote!{
-                    .params()
-                    #(#params)*
-                    .build()
-                })
+                        Some(quote!{
+                            .params()
+                            #(#kvs)*
+                            .build()
+                        })
+                    }
+                }
+                Params::Whole(value) => {
+                    let val = render_param_value(&value);
+                    Some(quote!{
+                        .set_params(#val.into())
+                    })
+                }
             };
 
             let maybe_children = if children.is_empty() {
@@ -74,7 +84,7 @@ pub fn render_node(node: Node) -> Tokens {
                             };
                             let child_rendered = render_node(child);
                             quote!{
-                                .add(#key.into(), #child_rendered.into())
+                                .add(#key.into(), #child_rendered)
                             }
                         }
                     }
@@ -97,10 +107,10 @@ pub fn render_node(node: Node) -> Tokens {
         },
         Node::Text {value, ..} => {
             match value {
-                TextValue::String(v) => quote!{#v},
+                TextValue::String(v) => quote!{#v.into()},
                 TextValue::Expr(_, v) => {
                     let v = Ident::new(v);
-                    quote!{(#v)}
+                    quote!{(#v).into()}
                 }
             }
         }

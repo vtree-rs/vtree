@@ -19,11 +19,17 @@ pub enum TextValue {
 }
 
 #[derive(Debug)]
+pub enum Params {
+    KeyValue(Vec<(String, Value)>),
+    Whole(Value),
+}
+
+#[derive(Debug)]
 pub enum Node {
     Node {
         name: String,
         key: Option<Value>,
-        params: Vec<(String, Value)>,
+        params: Params,
         children: Vec<Node>,
     },
     Text {
@@ -80,15 +86,25 @@ named!(pub parse_node -> Node,
         do_parse!(
             name: path >>
             key: option!(preceded!(punct!("@"), parse_value)) >>
-            params: many0!(do_parse!(
-                name: ident >>
-                value: alt!(
-                    preceded!(punct!("="), parse_value)
-                    |
-                    punct!("?") => {|_| Value::Bool(true)}
-                ) >>
-                ((name.to_string(), value))
-            )) >>
+            params: alt!(
+                do_parse!(
+                    value: preceded!(punct!("="), parse_value) >>
+                    (Params::Whole(value))
+                )
+                |
+                do_parse!(
+                    kvs: many0!(do_parse!(
+                        name: ident >>
+                        value: alt!(
+                            preceded!(punct!("="), parse_value)
+                            |
+                            punct!("?") => {|_| Value::Bool(true)}
+                        ) >>
+                        ((name.to_string(), value))
+                    )) >>
+                    (Params::KeyValue(kvs))
+                )
+            ) >>
             children: alt!(
                 punct!("/") => {|_| vec![]}
                 |
