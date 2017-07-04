@@ -6,3 +6,4 @@ publish = false
 [dependencies]
 vtree = { path = ".." }
 vtree_macros = { path = "../vtree_macros" }
+vtree_markup = { path = "../vtree_markup" }

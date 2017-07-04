@@ -20,5 +20,5 @@ pub fn markup(input: TokenStream) -> TokenStream {
     let node = parse_node(&input).expect("vtree markup");
     let rendered_node = render_node(node).into_string();
     println!("{}", rendered_node);
-    "".parse().unwrap()
+    rendered_node.parse().unwrap()
 }
