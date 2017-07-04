@@ -15,7 +15,7 @@ pub enum Value {
 #[derive(Debug)]
 pub enum TextValue {
     String(String),
-    Expr(String),
+    Expr(bool, String),
 }
 
 #[derive(Debug)]
@@ -65,7 +65,8 @@ named!(pub parse_node -> Node,
             value: alt!(
                 string => {|v: StrLit| TextValue::String(v.value)}
                 |
-                parse_expr => {|e| TextValue::Expr(e)}
+                tuple!(option!(punct!("+")), parse_expr) =>
+                    {|(add, e): (Option<_>, _)| TextValue::Expr(add.is_some(), e)}
             ) >>
             key: option!(preceded!(punct!("@"), parse_value)) >>
             (

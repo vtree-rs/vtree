@@ -3,14 +3,14 @@ use quote::{Tokens, Ident};
 
 fn render_param_value(val: &Value) -> Tokens {
     match val {
-        &Value::String(ref v) => quote!{::vtree::markup::ParamValue::from(#v)},
-        &Value::Int(ref v) => quote!{::vtree::markup::ParamValue::Int(#v)},
-        &Value::Bytes(ref v) => quote!{::vtree::markup::ParamValue::from(#v)},
+        &Value::String(ref v) => quote!{#v},
+        &Value::Int(ref v) => quote!{#v},
+        &Value::Bytes(ref v) => quote!{#v},
         &Value::Expr(ref v) => {
             let v = Ident::new(v.to_string());
-            quote!{::vtree::markup::ParamValue::from(#v)}
+            quote!{(#v)}
         }
-        &Value::Bool(ref v) => quote!{::vtree::markup::ParamValue::Bool(#v)},
+        &Value::Bool(ref v) => quote!{#v},
     }
 }
 
@@ -22,7 +22,7 @@ fn render_value(val: &Value) -> Tokens {
         &Value::Bytes(ref v) => quote!{#v},
         &Value::Expr(ref v) => {
             let v = Ident::new(v.to_string());
-            quote!{#v}
+            quote!{(#v)}
         }
         &Value::Bool(ref v) => quote!{#v},
     }
@@ -33,40 +33,74 @@ pub fn render_node(node: Node) -> Tokens {
         Node::Node {name, params, children, ..} => {
             let name = Ident::new(name);
 
-            let params = params.into_iter().map(|(key, val)| {
-                let val = render_param_value(&val);
-                quote!{
-                    (#key, #val),
-                }
-            });
+            let maybe_params = if params.is_empty() {
+                None
+            } else {
+                let params = params.into_iter().map(|(key, val)| {
+                    let set_key = Ident::new(format!("set_{}", key));
+                    let val = render_param_value(&val);
+                    quote!{
+                        .#set_key(#val.into())
+                    }
+                });
 
-            let children = children.into_iter().enumerate().map(|(index, child)| {
-                let key = {
-                    let key = match child {
-                        Node::Node {ref key, ..} => key,
-                        Node::Text {ref key, ..} => key,
-                    };
-                    render_value(key.as_ref().unwrap_or(&Value::Int(index as u64)))
-                };
-                let child = render_node(child);
-                quote!{
-                    (#key.into(), #child),
-                }
-            });
+                Some(quote!{
+                    .params()
+                    #(#params)*
+                    .build()
+                })
+            };
+
+            let maybe_children = if children.is_empty() {
+                None
+            } else {
+                let children = children.into_iter().enumerate().map(|(index, child)| {
+                    match &child {
+                        &Node::Text{value: TextValue::Expr(true, _), ..} => {
+                            let child_rendered = render_node(child);
+                            quote!{
+                                .add_all(#child_rendered)
+                            }
+                        }
+                        _ => {
+                            let key = {
+                                let key = match child {
+                                    Node::Node {ref key, ..} => key,
+                                    Node::Text {ref key, ..} => key,
+                                };
+                                render_value(key
+                                        .as_ref()
+                                        .unwrap_or(&Value::Int((100000 + index) as u64)))
+                            };
+                            let child_rendered = render_node(child);
+                            quote!{
+                                .add(#key.into(), #child_rendered.into())
+                            }
+                        }
+                    }
+                });
+
+                Some(quote!{
+                    .children()
+                    #(#children)*
+                    .build()
+                })
+            };
 
             quote!{
-                #name(
-                    vec![#(#params)*].iter(),
-                    vec![#(#children)*].iter(),
-                )
+                #name::builder()
+                    #maybe_params
+                    #maybe_children
+                    .build()
+                    .into()
             }
         },
         Node::Text {value, ..} => {
             match value {
-                TextValue::String(v) => quote!{#v.into()},
-                TextValue::Expr(v) => {
+                TextValue::String(v) => quote!{#v},
+                TextValue::Expr(_, v) => {
                     let v = Ident::new(v);
-                    quote!{#v.into()}
+                    quote!{(#v)}
                 }
             }
         }
