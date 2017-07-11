@@ -2,62 +2,21 @@
 #![feature(proc_macro)]
 
 extern crate vtree;
+#[macro_use]
 extern crate vtree_macros;
 extern crate vtree_markup;
 
-use vtree::key::Key;
-use vtree::widget::{Widget, WidgetData};
 use vtree::diff::{self, Context, Differ, Path};
 use vtree::node;
-use vtree_macros::define_nodes;
+use vtree_macros::{define_nodes, define_params};
 use vtree_markup::markup;
 
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct AParams {
-    s: String,
-}
-
-impl <PB> node::Params<PB> for AParams
-    where PB: node::BuilderSetter<node::BuilderParams, AParams>
-{
-    type Builder = AParamsBuilder<PB>;
-
-    fn builder(parent_builder: PB) -> AParamsBuilder<PB> {
-        AParamsBuilder {parent_builder: parent_builder, s: None}
+define_params!{
+    #[derive(Default, Debug, Clone, PartialEq)]
+    pub struct AParams {
+        s: String,
     }
 }
-
-pub struct AParamsBuilder<PB> {
-    parent_builder: PB,
-    s: Option<String>,
-}
-
-impl <PB> AParamsBuilder<PB>
-    where PB: node::BuilderSetter<node::BuilderParams, AParams>
-{
-    pub fn build(self) -> PB {
-        let mut pb = self.parent_builder;
-        pb.builder_set(AParams {s: self.s.unwrap_or_default()});
-        pb
-    }
-
-    pub fn set_s(mut self, value: String) -> Self {
-        self.s = Some(value);
-        self
-    }
-}
-
-// struct A
-// struct Text
-// struct Widget
-//
-// mod children {
-//     enum A {}
-// }
-//
-// mod builders {
-//     struct A
-// }
 
 define_nodes!{
     nodes {
@@ -73,21 +32,6 @@ define_nodes!{
 }
 
 use groups::AllNodes;
-
-// #[derive(Debug, Clone)]
-// struct GroupAWidget;
-// impl Widget for GroupAWidget {
-//     type Input = String;
-//     type Output = GroupA;
-//
-//     fn new() -> Self {
-//         GroupAWidget
-//     }
-//
-//     fn render(&self, i: Self::Input) -> Option<GroupA> {
-//         Some(a(AParams { s: i }, &[]))
-//     }
-// }
 
 #[derive(Debug)]
 struct MyDiffer;

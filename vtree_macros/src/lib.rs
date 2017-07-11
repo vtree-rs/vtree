@@ -11,10 +11,12 @@ extern crate proc_macro;
 
 mod parser;
 mod generator;
+mod params;
 
 use parser::parse;
 use generator::generate_defs;
 use proc_macro::TokenStream;
+use params::handle_params;
 
 #[proc_macro]
 pub fn define_nodes(input: TokenStream) -> TokenStream {
@@ -23,6 +25,12 @@ pub fn define_nodes(input: TokenStream) -> TokenStream {
     for param_ty in pd.normal_nodes().filter_map(|node| node.params_ty.as_ref()) {
         assert!(param_ty.global, "`{}` is not a global module Path", quote!{#param_ty});
     }
-    println!("{:?}", pd);
     generate_defs(pd).parse().unwrap()
+}
+
+#[proc_macro]
+pub fn define_params(input: TokenStream) -> TokenStream {
+    let res = handle_params(input.to_string());
+    println!("{}\n", res);
+    res.parse().unwrap()
 }
