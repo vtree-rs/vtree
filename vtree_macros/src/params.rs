@@ -1,17 +1,20 @@
 use quote::Tokens;
 use syn::Ident;
-use syn::{parse_derive_input, Body, VariantData, Field, Attribute, MetaItem};
+use syn::{self, parse_derive_input, Body, VariantData, Field, Attribute, MetaItem};
 
-fn field_contains_event_attr(field: &Field) -> bool {
+fn field_is_event(field: &Field) -> bool {
     field.attrs.iter().any(|attr| attr.name() == "event")
 }
 
 fn gen_builder(name: &Ident, fields: &[Field]) -> Tokens {
     let builder_name: Ident = format!("{}Builder", name.as_ref()).into();
+    let events_name: Ident = format!("{}Events", name.as_ref()).into();
+    let events_name_str = events_name.as_ref();
+    let has_events = fields.into_iter().any(|f| !field_is_event(f));
 
     let struct_fields = fields
         .into_iter()
-        .filter(|f| !field_contains_event_attr(f))
+        .filter(|f| !field_is_event(f))
         .map(|field| {
             let field_name = field.ident.as_ref().unwrap();
             let ty = &field.ty;
@@ -22,7 +25,7 @@ fn gen_builder(name: &Ident, fields: &[Field]) -> Tokens {
 
     let build_fields = fields
         .into_iter()
-        .filter(|f| !field_contains_event_attr(f))
+        .filter(|f| !field_is_event(f))
         .map(|field| {
             let field_name = field.ident.as_ref().unwrap();
             let unwrap = field.attrs
@@ -50,37 +53,114 @@ fn gen_builder(name: &Ident, fields: &[Field]) -> Tokens {
 
     let setters_getters = fields
         .into_iter()
-        .filter(|f| !field_contains_event_attr(f))
         .map(|field| {
             let ty = &field.ty;
             let field_name = field.ident.as_ref().unwrap();
             let setter_name: Ident = format!("set_{}", field_name.as_ref()).into();
             let mut_getter_name: Ident = format!("mut_{}", field_name.as_ref()).into();
-            quote! {
-                pub fn #setter_name(mut self, value: #ty) -> #builder_name<PB> {
-                    self.#field_name = Some(value);
-                    self
-                }
 
-                pub fn #field_name(&self) -> ::std::option::Option<&#ty> {
-                    self.#field_name.as_ref()
+            if field_is_event(field) {
+                quote! {
+                    pub fn #setter_name<F>(mut self, f: F) -> #builder_name<PB>
+                        where F: FnMut(#ty) + 'static
+                    {
+                        match self.events_ {
+                            ::std::option::Option::Some(ref mut events) => events,
+                            ::std::option::Option::None => {
+                                self.events_ =
+                                    ::std::option::Option::Some(::std::default::Default::default());
+                                self.events_.as_mut().unwrap()
+                            }
+                        }.#field_name = ::std::option::Option::Some(::std::boxed::Box::new(f));
+                        self
+                    }
                 }
+            } else {
+                quote! {
+                    pub fn #setter_name(mut self, value: #ty) -> #builder_name<PB> {
+                        self.#field_name = ::std::option::Option::Some(value);
+                        self
+                    }
 
-                pub fn #mut_getter_name(&mut self) -> ::std::option::Option<&mut #ty> {
-                    self.#field_name.as_mut()
+                    pub fn #field_name(&self) -> ::std::option::Option<&#ty> {
+                        self.#field_name.as_ref()
+                    }
+
+                    pub fn #mut_getter_name(&mut self) -> ::std::option::Option<&mut #ty> {
+                        self.#field_name.as_mut()
+                    }
                 }
             }
         });
 
     let constructor_fields = fields
         .into_iter()
-        .filter(|f| !field_contains_event_attr(f))
+        .filter(|f| !field_is_event(f))
         .map(|field| {
             let field_name = field.ident.as_ref().unwrap();
             quote! {
-                #field_name: None,
+                #field_name: ::std::option::Option::None,
             }
         });
+
+    let maybe_events = if has_events {
+        let event_fields = fields
+            .into_iter()
+            .filter(|f| field_is_event(f))
+            .map(|field| {
+                let field_name = field.ident.as_ref().unwrap();
+                let ty = &field.ty;
+                quote! {
+                    #field_name: ::std::option::Option<::std::boxed::Box<FnMut(#ty) + 'static>>,
+                }
+            });
+
+        Some(quote!{
+            #[derive(Default)]
+            pub struct #events_name {
+                #(#event_fields)*
+            }
+
+            impl ::vtree::node::ParamsEvents<AllEvent> for #events_name {
+                fn send(&mut self, event_name: &'static str, event: AllEvent) {
+                    // TODO
+                }
+            }
+
+            impl ::std::fmt::Debug for #events_name {
+                fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                    f.write_str(#events_name_str)
+                }
+            }
+
+        })
+    } else {
+        None
+    };
+
+    let maybe_struct_events_field = if has_events {
+        Some(quote!{
+            events_: ::std::option::Option<#events_name>,
+        })
+    } else {
+        None
+    };
+
+    let maybe_constructor_events_field = if has_events {
+        Some(quote!{
+            events_: ::std::option::Option::None,
+        })
+    } else {
+        None
+    };
+
+    let maybe_build_events_field = if has_events {
+        Some(quote!{
+            events_: ::vtree::node::ParamsEventsWrapper(self.events_),
+        })
+    } else {
+        None
+    };
 
     quote!{
         impl <PB> ::vtree::node::Params<PB> for #name
@@ -95,6 +175,7 @@ fn gen_builder(name: &Ident, fields: &[Field]) -> Tokens {
 
         pub struct #builder_name<PB> {
             parent_builder_: PB,
+            #maybe_struct_events_field
             #(#struct_fields)*
         }
 
@@ -104,6 +185,7 @@ fn gen_builder(name: &Ident, fields: &[Field]) -> Tokens {
             pub fn new(parent_builder: PB) -> #builder_name<PB> {
                 #builder_name {
                     parent_builder_: parent_builder,
+                    #maybe_constructor_events_field
                     #(#constructor_fields)*
                 }
             }
@@ -112,11 +194,14 @@ fn gen_builder(name: &Ident, fields: &[Field]) -> Tokens {
                 let mut pb = self.parent_builder_;
                 pb.builder_set(#name {
                     #(#build_fields)*
+                    #maybe_build_events_field
                 });
                 pb
             }
             #(#setters_getters)*
         }
+
+        #maybe_events
     }
 }
 
@@ -129,8 +214,22 @@ pub fn handle_params(input: String) -> String {
             Body::Enum(_) => panic!("params macro: enums not supported"),
         };
         let builder = gen_builder(&ast.ident, &fields);
+        let has_events = fields.into_iter().any(|f| !field_is_event(f));
+        fields.retain(|f| !field_is_event(f));
+        if has_events {
+            let events_name: Ident = format!("{}Events", ast.ident.as_ref()).into();
+            fields.push(Field {
+                ident: Some("events_".into()),
+                vis: syn::Visibility::Inherited,
+                attrs: vec![],
+                ty: syn::Ty::Path(
+                    None,
+                    syn::parse_path(&quote!(::vtree::node::ParamsEventsWrapper<#events_name>).into_string()).unwrap()
+                ),
+            });
+        }
         for field in fields.iter_mut() {
-            field.attrs.retain(|a| !["default", "event"].contains(&a.name()));
+            field.attrs.retain(|a| !["default"].contains(&a.name()));
         }
         builder
     };

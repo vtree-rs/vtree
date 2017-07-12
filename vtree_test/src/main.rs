@@ -11,10 +11,14 @@ use vtree::node;
 use vtree_macros::{define_nodes, define_params};
 use vtree_markup::markup;
 
+pub struct AllEvent;
+
 define_params!{
     #[derive(Default, Debug, Clone, PartialEq)]
     pub struct AParams {
         s: String,
+        #[event]
+        event_u64: u64,
     }
 }
 
