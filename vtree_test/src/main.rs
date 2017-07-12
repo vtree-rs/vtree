@@ -11,10 +11,17 @@ use vtree::node;
 use vtree_macros::{define_nodes, define_params};
 use vtree_markup::markup;
 
+#[derive(Debug)]
+pub enum AllEvent {
+    U64(u64),
+}
+
 define_params!{
     #[derive(Default, Debug, Clone, PartialEq)]
     pub struct AParams {
         s: String,
+        #[event="U64"]
+        event_u64: u64,
     }
 }
 
