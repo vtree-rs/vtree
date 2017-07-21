@@ -88,12 +88,12 @@ pub fn gen_node_defs<'a>(pd: &'a ParsedData) -> impl Iterator<Item = Tokens> + '
             match ty {
                 ChildType::Single => {
                     quote!{
-                        pub child: ::vtree::child::Single<#name, groups::AllNodes>,
+                        pub children: ::vtree::child::Single<#name, groups::AllNodes>,
                     }
                 }
                 ChildType::Optional => {
                     quote!{
-                        pub child: ::vtree::child::Option<#name, groups::AllNodes>,
+                        pub children: ::vtree::child::Option<#name, groups::AllNodes>,
                     }
                 }
                 ChildType::Multi => {

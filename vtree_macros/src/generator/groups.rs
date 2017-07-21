@@ -176,8 +176,8 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
                 ChildType::Single => {
                     quote!{
                         AllNodes::diff(
-                            &curr_node.child,
-                            &last_node.child,
+                            &curr_node.children,
+                            &last_node.children,
                             &path,
                             0,
                             ctx,
@@ -187,7 +187,7 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
                 }
                 ChildType::Optional => {
                     quote!{
-                        match (&curr_node.child, &last_node.child) {
+                        match (&curr_node.children, &last_node.children) {
                             (&Some(ref curr_child), &Some(ref last_child)) =>
                                 AllNodes::diff(
                                     curr_child,
@@ -293,13 +293,13 @@ fn gen_all_nodes_impl_visit_variants<'a>(pd: &'a ParsedData, is_enter: bool) -> 
         let child = match ty {
             ChildType::Single => {
                 quote!{
-                    &curr_node.child.#name_visit(&path, 0, f);
+                    &curr_node.children.#name_visit(&path, 0, f);
                 }
             }
             ChildType::Optional => {
                 quote!{
-                    if let Some(child) = &curr_node.child {
-                        child.#name_visit(&path, 0, f);
+                    if let Some(children) = &curr_node.children {
+                        children.#name_visit(&path, 0, f);
                     }
                 }
             }
@@ -372,7 +372,7 @@ pub fn gen_group_from_node_impls<'a, IT>(group: &'a Ident,
             where WD: ::vtree::widget::WidgetDataTrait<#group> + 'static
         {
             fn from(widget_data: WD) -> #group {
-                #group::Widget(Box::new(widget_data))
+                #group::Widget(::std::boxed::Box::new(widget_data))
             }
         }
     })
