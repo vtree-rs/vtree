@@ -269,7 +269,7 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
             path: &::vtree::diff::Path,
             index: usize,
             ctx: &::vtree::diff::Context<AllNodes>,
-            differ: &D,
+            differ: &mut D,
         )
             where D: ::vtree::diff::Differ<AllNodes>
         {
