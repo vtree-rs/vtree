@@ -161,11 +161,11 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
                 return quote!{
                     (&AllNodes::Text(ref str_a), &AllNodes::Text(ref str_b)) => {
                         if str_a != str_b {
-                            differ.diff_params_changed(path, curr, last);
+                            differ.diff_params_changed(ctx, path, curr, last);
                         }
                     }
                     (&AllNodes::Text(..), _) => {
-                        differ.diff_replaced(path, index, curr, last);
+                        differ.diff_replaced(ctx, path, index, curr, last);
                     }
                 };
             }
@@ -198,9 +198,9 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
                                     differ,
                                 ),
                             (&Some(ref curr_child), None) =>
-                                differ.diff_added(&path, 0, curr_child),
+                                differ.diff_added(ctx, &path, 0, curr_child),
                             (None, &Some(ref last_child)) =>
-                                differ.diff_removed(&path, 0, last_child),
+                                differ.diff_removed(ctx, &path, 0, last_child),
                             (None, None) => {}
                         }
                     }
@@ -220,15 +220,15 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
                                         differ,
                                     ),
                                 (Some(curr_child), None) =>
-                                    differ.diff_added(&path.add(key.clone()), index, curr_child),
+                                    differ.diff_added(ctx, &path.add(key.clone()), index, curr_child),
                                 (None, Some(last_child)) =>
-                                    differ.diff_removed(&path.add(key.clone()), index, last_child),
+                                    differ.diff_removed(ctx, &path.add(key.clone()), index, last_child),
                                 (None, None) => unreachable!(),
                             }
                         }
 
                         let reordered = curr_node.children.diff_reordered(&last_node.children);
-                        differ.diff_reordered(&path, reordered);
+                        differ.diff_reordered(ctx, &path, reordered);
                     }
                 }
             }
@@ -238,7 +238,7 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
 
         let maybe_params_cmp = node.params_ty.as_ref().map(|_| quote!{
             if curr_node.params != last_node.params {
-                differ.diff_params_changed(path, curr, last);
+                differ.diff_params_changed(ctx, path, curr, last);
             }
         });
 
@@ -257,21 +257,21 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
                 &AllNodes::#node_name(..),
                 _
             ) => {
-                differ.diff_replaced(path, index, curr, last);
+                differ.diff_replaced(ctx, path, index, curr, last);
             }
         }
     });
 
     quote!{
-        pub fn diff<D>(
+        pub fn diff<CTX, D>(
             curr: &AllNodes,
             last: &AllNodes,
             path: &::vtree::diff::Path,
             index: usize,
-            ctx: &::vtree::diff::Context<AllNodes>,
+            ctx: &mut ::vtree::diff::Context<CTX, AllNodes>,
             differ: &mut D,
         )
-            where D: ::vtree::diff::Differ<AllNodes>
+            where D: ::vtree::diff::Differ<CTX, AllNodes>
         {
             match (curr, last) {
                 (&AllNodes::Widget(_), _) => panic!("curr isn't allowed to be a AllNodes::Widget in diff"),

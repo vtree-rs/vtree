@@ -71,22 +71,23 @@ impl fmt::Display for Path {
     }
 }
 
-pub trait Differ<AN>: Debug {
-    fn diff_added(&mut self, path: &Path, index: usize, curr: &AN);
-    fn diff_removed(&mut self, path: &Path, index: usize, last: &AN);
-    fn diff_replaced(&mut self, path: &Path, index: usize, curr: &AN, last: &AN);
-    fn diff_params_changed(&mut self, path: &Path, curr: &AN, last: &AN);
-    fn diff_reordered<I: Iterator<Item=(usize, usize)>>(&mut self, path: &Path, indices: I);
+pub trait Differ<CTX, AN>: Debug {
+    fn diff_added(&mut self, ctx: &mut Context<CTX, AN>, path: &Path, index: usize, curr: &AN);
+    fn diff_removed(&mut self, ctx: &mut Context<CTX, AN>, path: &Path, index: usize, last: &AN);
+    fn diff_replaced(&mut self, ctx: &mut Context<CTX, AN>, path: &Path, index: usize, curr: &AN, last: &AN);
+    fn diff_params_changed(&mut self, ctx: &mut Context<CTX, AN>, path: &Path, curr: &AN, last: &AN);
+    fn diff_reordered<I: Iterator<Item=(usize, usize)>>(&mut self, ctx: &mut Context<CTX, AN>, path: &Path, indices: I);
 }
 
 #[derive(Debug)]
-pub struct Context<AN> {
+pub struct Context<CTX, AN> {
     // pub widgets: HashMap<diff::Path, Box<WidgetDataTrait<G>>>,
+    pub ctx: CTX,
     pd: PhantomData<AN>,
 }
 
-impl<AN> Context<AN> {
-    pub fn new() -> Context<AN> {
-        Context { pd: PhantomData }
+impl<CTX, AN> Context<CTX, AN> {
+    pub fn new(ctx: CTX) -> Context<CTX, AN> {
+        Context { ctx: ctx, pd: PhantomData }
     }
 }
