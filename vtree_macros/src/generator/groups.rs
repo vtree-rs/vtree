@@ -59,14 +59,14 @@ fn gen_all_nodes_impl_expand_widgets(pd: &ParsedData) -> Tokens {
                     AllNodes::expand_widgets(
                         &mut curr_node.children,
                         Some(&last_node.children),
-                        &path
+                        &path.add_empty()
                     );
                 }
             }
             ChildType::Optional => {
                 quote!{
                     if let Some(children) = curr_node.children {
-                        AllNodes::expand_widgets(children, last_node.children, &path);
+                        AllNodes::expand_widgets(children, last_node.children, &path.add_empty());
                     }
                 }
             }
@@ -76,7 +76,7 @@ fn gen_all_nodes_impl_expand_widgets(pd: &ParsedData) -> Tokens {
                         AllNodes::expand_widgets(
                             node,
                             last_node.children.get_by_key(key),
-                            &path.add(key.clone())
+                            &path.add_key(key.clone())
                         );
                     }
                 }
@@ -86,20 +86,20 @@ fn gen_all_nodes_impl_expand_widgets(pd: &ParsedData) -> Tokens {
         let child_last_none = match ty {
             ChildType::Single => {
                 quote!{
-                    AllNodes::expand_widgets(&mut curr_node.children, None, &path);
+                    AllNodes::expand_widgets(&mut curr_node.children, None, &path.add_empty());
                 }
             }
             ChildType::Optional => {
                 quote!{
                     if let Some(ref mut children) = curr_node.children {
-                        AllNodes::expand_widgets(children, None, &path);
+                        AllNodes::expand_widgets(children, None, &path.add_empty());
                     }
                 }
             }
             ChildType::Multi => {
                 quote!{
                     for (key, node) in curr_node.children.iter_mut() {
-                        AllNodes::expand_widgets(node, None, &path.add(key.clone()));
+                        AllNodes::expand_widgets(node, None, &path.add_key(key.clone()));
                     }
                 }
             }
@@ -161,7 +161,7 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
                 return quote!{
                     (&AllNodes::Text(ref str_a), &AllNodes::Text(ref str_b)) => {
                         if str_a != str_b {
-                            differ.diff_params_changed(ctx, path, curr, last);
+                            differ.diff_replaced(ctx, path, index, curr, last);
                         }
                     }
                     (&AllNodes::Text(..), _) => {
@@ -178,7 +178,7 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
                         AllNodes::diff(
                             &curr_node.children,
                             &last_node.children,
-                            &path,
+                            &path.add_empty(),
                             0,
                             ctx,
                             differ,
@@ -192,15 +192,15 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
                                 AllNodes::diff(
                                     curr_child,
                                     last_child,
-                                    &path,
+                                    &path.add_empty(),
                                     0,
                                     ctx,
                                     differ,
                                 ),
                             (&Some(ref curr_child), None) =>
-                                differ.diff_added(ctx, &path, 0, curr_child),
+                                differ.diff_added(ctx, &path.add_empty(), 0, curr_child),
                             (None, &Some(ref last_child)) =>
-                                differ.diff_removed(ctx, &path, 0, last_child),
+                                differ.diff_removed(ctx, &path.add_empty(), 0, last_child),
                             (None, None) => {}
                         }
                     }
@@ -214,21 +214,21 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
                                     AllNodes::diff(
                                         curr_child,
                                         last_child,
-                                        &path.add(key.clone()),
+                                        &path.add_key(key.clone()),
                                         index,
                                         ctx,
                                         differ,
                                     ),
                                 (Some(curr_child), None) =>
-                                    differ.diff_added(ctx, &path.add(key.clone()), index, curr_child),
+                                    differ.diff_added(ctx, &path.add_key(key.clone()), index, curr_child),
                                 (None, Some(last_child)) =>
-                                    differ.diff_removed(ctx, &path.add(key.clone()), index, last_child),
+                                    differ.diff_removed(ctx, &path.add_key(key.clone()), index, last_child),
                                 (None, None) => unreachable!(),
                             }
                         }
 
                         let reordered = curr_node.children.diff_reordered(&last_node.children);
-                        differ.diff_reordered(ctx, &path, reordered);
+                        differ.diff_reordered(ctx, path, reordered);
                     }
                 }
             }
@@ -293,13 +293,13 @@ fn gen_all_nodes_impl_visit_variants<'a>(pd: &'a ParsedData, is_enter: bool) -> 
         let child = match ty {
             ChildType::Single => {
                 quote!{
-                    &curr_node.children.#name_visit(&path, 0, f);
+                    &curr_node.children.#name_visit(&path.add_empty(), 0, f);
                 }
             }
             ChildType::Optional => {
                 quote!{
                     if let Some(children) = &curr_node.children {
-                        children.#name_visit(&path, 0, f);
+                        children.#name_visit(&path.add_empty(), 0, f);
                     }
                 }
             }
@@ -307,7 +307,7 @@ fn gen_all_nodes_impl_visit_variants<'a>(pd: &'a ParsedData, is_enter: bool) -> 
                 quote!{
                     let it = curr_node.children.iter().enumerate();
                     for (index, (key, node)) in it {
-                        node.#name_visit(&path.add(key.clone()), index, f);
+                        node.#name_visit(&path.add_key(key.clone()), index, f);
                     }
                 }
             }
