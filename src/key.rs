@@ -1,15 +1,30 @@
-use std::fmt::{self, Write};
+use std::fmt;
 use std::rc::Rc;
 use std::convert::{From, Into};
 use std::borrow::Borrow;
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, Eq, Hash, Clone)]
 pub enum Key {
     U64(u64),
     I64(i64),
     String(Rc<String>),
     Str(&'static str),
     Bytes(Rc<Vec<u8>>),
+}
+
+impl PartialEq for Key {
+    fn eq(&self, other: &Key) -> bool {
+        match (self, other) {
+            (&Key::U64(ref a), &Key::U64(ref b)) => a == b,
+            (&Key::I64(ref a), &Key::I64(ref b)) => a == b,
+            (&Key::String(ref a), &Key::String(ref b)) => a == b,
+            (&Key::String(ref a), &Key::Str(b)) => a.as_str() == b,
+            (&Key::Str(a), &Key::String(ref b)) => a == b.as_str(),
+            (&Key::Str(a), &Key::Str(b)) => a == b,
+            (&Key::Bytes(ref a), &Key::Bytes(ref b)) => a == b,
+            _ => false,
+        }
+    }
 }
 
 macro_rules! impl_from_int_for_key {
@@ -75,18 +90,17 @@ impl<'a, T, O> From<&'a T> for Key
 
 impl fmt::Display for Key {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &Key::U64(ref n) => write!(f, "{}", n),
-            &Key::I64(ref n) => write!(f, "{}", n),
-            &Key::String(ref s) => write!(f, "{}", s),
-            &Key::Str(s) => write!(f, "{}", s),
-            &Key::Bytes(ref bytes) => {
-                let mut s = String::with_capacity(bytes.len() * 2 + 2);
-                write!(&mut s, "0x")?;
-                for &b in bytes.iter() {
-                    write!(&mut s, "{:x}", b)?;
+        match *self {
+            Key::U64(ref n) => write!(f, "u{}", n),
+            Key::I64(ref n) => write!(f, "i{}", n),
+            Key::String(ref s) => write!(f, "s{}", s),
+            Key::Str(s) => write!(f, "s{}", s),
+            Key::Bytes(ref bytes) => {
+                write!(f, "0x")?;
+                for b in bytes.iter() {
+                    write!(f, "{:02x}", b)?;
                 }
-                f.write_str(s.as_ref())
+                Ok(())
             }
         }
     }
