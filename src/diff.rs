@@ -74,7 +74,10 @@ impl fmt::Display for Path {
 pub trait Differ<CTX, AN>: Debug {
     fn diff_added(&mut self, ctx: &mut Context<CTX, AN>, path: &Path, index: usize, curr: &AN);
     fn diff_removed(&mut self, ctx: &mut Context<CTX, AN>, path: &Path, index: usize, last: &AN);
-    fn diff_replaced(&mut self, ctx: &mut Context<CTX, AN>, path: &Path, index: usize, curr: &AN, last: &AN);
+    fn diff_replaced(&mut self, ctx: &mut Context<CTX, AN>, path: &Path, index: usize, curr: &AN, last: &AN) {
+        self.diff_removed(ctx, path, index, last);
+        self.diff_added(ctx, path, index, curr);
+    }
     fn diff_params_changed(&mut self, ctx: &mut Context<CTX, AN>, path: &Path, curr: &AN, last: &AN);
     fn diff_reordered<I: Iterator<Item=(usize, usize)>>(&mut self, ctx: &mut Context<CTX, AN>, path: &Path, indices: I);
 }
