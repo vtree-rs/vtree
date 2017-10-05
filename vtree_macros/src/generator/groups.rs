@@ -59,14 +59,18 @@ fn gen_all_nodes_impl_expand_widgets(pd: &ParsedData) -> Tokens {
                     AllNodes::expand_widgets(
                         &mut curr_node.children,
                         Some(&last_node.children),
-                        &path.add_empty()
+                        &path.add_empty(),
                     );
                 }
             }
             ChildType::Optional => {
                 quote!{
                     if let Some(children) = curr_node.children {
-                        AllNodes::expand_widgets(children, last_node.children, &path.add_empty());
+                        AllNodes::expand_widgets(
+                            children,
+                            last_node.children,
+                            &path.add_empty(),
+                        );
                     }
                 }
             }
@@ -76,7 +80,7 @@ fn gen_all_nodes_impl_expand_widgets(pd: &ParsedData) -> Tokens {
                         AllNodes::expand_widgets(
                             node,
                             last_node.children.get_by_key(key),
-                            &path.add_key(key.clone())
+                            &path.add_key(key.clone()),
                         );
                     }
                 }
@@ -86,20 +90,32 @@ fn gen_all_nodes_impl_expand_widgets(pd: &ParsedData) -> Tokens {
         let child_last_none = match ty {
             ChildType::Single => {
                 quote!{
-                    AllNodes::expand_widgets(&mut curr_node.children, None, &path.add_empty());
+                    AllNodes::expand_widgets(
+                        &mut curr_node.children,
+                        None,
+                        &path.add_empty(),
+                    );
                 }
             }
             ChildType::Optional => {
                 quote!{
                     if let Some(ref mut children) = curr_node.children {
-                        AllNodes::expand_widgets(children, None, &path.add_empty());
+                        AllNodes::expand_widgets(
+                            children,
+                            None,
+                            &path.add_empty(),
+                        );
                     }
                 }
             }
             ChildType::Multi => {
                 quote!{
                     for (key, node) in curr_node.children.iter_mut() {
-                        AllNodes::expand_widgets(node, None, &path.add_key(key.clone()));
+                        AllNodes::expand_widgets(
+                            node,
+                            None,
+                            &path.add_key(key.clone()),
+                        );
                     }
                 }
             }
@@ -125,7 +141,7 @@ fn gen_all_nodes_impl_expand_widgets(pd: &ParsedData) -> Tokens {
         pub fn expand_widgets(
             curr: &mut AllNodes,
             last: ::std::option::Option<&AllNodes>,
-            path: &::vtree::diff::Path
+            path: &::vtree::diff::SimplePathFrame,
         ) {
             if let &mut AllNodes::Widget(..) = curr {
                 let null_widget =
@@ -161,11 +177,11 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
                 return quote!{
                     (&AllNodes::Text(ref str_a), &AllNodes::Text(ref str_b)) => {
                         if str_a != str_b {
-                            differ.diff_replaced(ctx, path, index, curr, last);
+                            differ.diff_replaced(ctx, curr, last);
                         }
                     }
                     (&AllNodes::Text(..), _) => {
-                        differ.diff_replaced(ctx, path, index, curr, last);
+                        differ.diff_replaced(ctx, curr, last);
                     }
                 };
             }
@@ -176,10 +192,8 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
                 ChildType::Single => {
                     quote!{
                         AllNodes::diff(
-                            &curr_node.children,
-                            &last_node.children,
-                            &path.add_empty(),
-                            0,
+                            &curr.add_empty(&curr_node.children),
+                            &last.add_empty(&last_node.children),
                             ctx,
                             differ,
                         );
@@ -190,17 +204,23 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
                         match (&curr_node.children, &last_node.children) {
                             (&Some(ref curr_child), &Some(ref last_child)) =>
                                 AllNodes::diff(
-                                    curr_child,
-                                    last_child,
-                                    &path.add_empty(),
-                                    0,
+                                    &curr.add_empty(curr_child),
+                                    &last.add_empty(last_child),
                                     ctx,
                                     differ,
                                 ),
-                            (&Some(ref curr_child), None) =>
-                                differ.diff_added(ctx, &path.add_empty(), 0, curr_child),
-                            (None, &Some(ref last_child)) =>
-                                differ.diff_removed(ctx, &path.add_empty(), 0, last_child),
+                            (&Some(ref curr_child), None) => {
+                                let c = curr.add_empty(curr_child);
+                                differ.on_enter_curr(ctx, &c);
+                                differ.diff_added(ctx, &c);
+                                differ.on_exit_curr(ctx, &c);
+                            }
+                            (None, &Some(ref last_child)) => {
+                                let l = last.add_empty(last_child);
+                                differ.on_enter_last(ctx, &l);
+                                differ.diff_removed(ctx, &l);
+                                differ.on_exit_last(ctx, &l);
+                            }
                             (None, None) => {}
                         }
                     }
@@ -208,27 +228,32 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
                 ChildType::Multi => {
                     quote!{
                         let field_diff = curr_node.children.diff(&last_node.children);
-                        for (key, index, curr_child, last_child) in field_diff {
+                        for (key, curr_child, last_child) in field_diff {
                             match (curr_child, last_child) {
-                                (Some(curr_child), Some(last_child)) =>
+                                (Some((curr_index, curr_child)), Some((last_index, last_child))) =>
                                     AllNodes::diff(
-                                        curr_child,
-                                        last_child,
-                                        &path.add_key(key.clone()),
-                                        index,
+                                        &curr.add_key(key.clone(), curr_index, curr_child),
+                                        &last.add_key(key.clone(), last_index, last_child),
                                         ctx,
-                                        differ,
+                                        differ
                                     ),
-                                (Some(curr_child), None) =>
-                                    differ.diff_added(ctx, &path.add_key(key.clone()), index, curr_child),
-                                (None, Some(last_child)) =>
-                                    differ.diff_removed(ctx, &path.add_key(key.clone()), index, last_child),
+                                (Some((curr_index, curr_child)), None) => {}
+                                    let c = curr.add_key(key.clone(), curr_index, curr_child);
+                                    differ.on_enter_curr(ctx, &c);
+                                    differ.diff_added(ctx, &c);
+                                    differ.on_exit_curr(ctx, &c);
+                                }
+                                (None, Some((last_index, last_child))) =>
+                                    let l = last.add_key(key.clone(), last_index, last_child);
+                                    differ.on_enter_last(ctx, &l);
+                                    differ.diff_removed(ctx, &l),
+                                    differ.on_exit_last(ctx, &l);
                                 (None, None) => unreachable!(),
                             }
                         }
 
                         let reordered = curr_node.children.diff_reordered(&last_node.children);
-                        differ.diff_reordered(ctx, path, reordered);
+                        differ.diff_reordered(ctx, curr, reordered);
                     }
                 }
             }
@@ -238,7 +263,7 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
 
         let maybe_params_cmp = node.params_ty.as_ref().map(|_| quote!{
             if curr_node.params != last_node.params {
-                differ.diff_params_changed(ctx, path, curr, last);
+                differ.diff_params_changed(ctx, curr, last);
             }
         });
 
@@ -257,27 +282,29 @@ fn gen_all_nodes_impl_diff(pd: &ParsedData) -> Tokens {
                 &AllNodes::#node_name(..),
                 _
             ) => {
-                differ.diff_replaced(ctx, path, index, curr, last);
+                differ.diff_replaced(ctx, curr, last);
             }
         }
     });
 
     quote!{
         pub fn diff<CTX, D>(
-            curr: &AllNodes,
-            last: &AllNodes,
-            path: &::vtree::diff::Path,
-            index: usize,
+            curr: &::vtree::diff::PathFrame<AllNodes>,
+            last: &::vtree::diff::PathFrame<AllNodes>,
             ctx: &mut ::vtree::diff::Context<CTX, AllNodes>,
             differ: &mut D,
         )
             where D: ::vtree::diff::Differ<CTX, AllNodes>
         {
-            match (curr, last) {
+            diff.on_enter_curr(ctx, curr);
+            diff.on_enter_last(ctx, last);
+            match (curr.node(), last.node()) {
                 (&AllNodes::Widget(_), _) => panic!("curr isn't allowed to be a AllNodes::Widget in diff"),
                 (_, &AllNodes::Widget(_)) => panic!("last isn't allowed to be a AllNodes::Widget in diff"),
                 #(#variants)*
             }
+            diff.on_exit_curr(ctx, curr);
+            diff.on_exit_last(ctx, last);
         }
     }
 }
@@ -293,13 +320,13 @@ fn gen_all_nodes_impl_visit_variants<'a>(pd: &'a ParsedData, is_enter: bool) -> 
         let child = match ty {
             ChildType::Single => {
                 quote!{
-                    &curr_node.children.#name_visit(&path.add_empty(), 0, f);
+                    AllNodes::#name_visit(&curr.add_empty(&curr_node.children), f);
                 }
             }
             ChildType::Optional => {
                 quote!{
-                    if let Some(children) = &curr_node.children {
-                        children.#name_visit(&path.add_empty(), 0, f);
+                    if let Some(ref node) = &curr_node.children {
+                        AllNodes::#name_visit(&curr.add_empty(node), f);
                     }
                 }
             }
@@ -307,7 +334,7 @@ fn gen_all_nodes_impl_visit_variants<'a>(pd: &'a ParsedData, is_enter: bool) -> 
                 quote!{
                     let it = curr_node.children.iter().enumerate();
                     for (index, (key, node)) in it {
-                        node.#name_visit(&path.add_key(key.clone()), index, f);
+                        AllNodes::#name_visit(&curr.add_key(key.clone(), index, node), f);
                     }
                 }
             }
@@ -326,25 +353,81 @@ fn gen_all_nodes_impl_visit(pd: &ParsedData) -> Tokens {
     let variants_enter = gen_all_nodes_impl_visit_variants(pd, true);
     let variants_exit = gen_all_nodes_impl_visit_variants(pd, false);
 
+    // let variants = pd.normal_nodes().filter_map(move |node| {
+    //     let ty = if let Some((ty, _)) = node.child {
+    //         ty
+    //     } else {
+    //         return None;
+    //     };
+    //     let child = match ty {
+    //         ChildType::Single => {
+    //             quote!{
+    //                 curr_node.children.visit(&path.add_empty(), 0, s, f);
+    //             }
+    //         }
+    //         ChildType::Optional => {
+    //             quote!{
+    //                 if let Some(children) = &curr_node.children {
+    //                     children.visit(&path.add_empty(), 0, s, f);
+    //                 }
+    //             }
+    //         }
+    //         ChildType::Multi => {
+    //             quote!{
+    //                 let it = curr_node.children.iter().enumerate();
+    //                 for (index, (key, node)) in it {
+    //                     node.visit(&path.add_key(key.clone()), index, s, f);
+    //                 }
+    //             }
+    //         }
+    //     };
+    //
+    //     let node_name = &node.name;
+    //     Some(quote!{
+    //         &AllNodes::#node_name(ref curr_node) => {
+    //             #child
+    //         }
+    //     })
+    // });
+
     quote!{
-        pub fn visit_enter<F>(&self, path: &::vtree::diff::Path, index: usize, f: &mut F)
-            where F: ::std::ops::FnMut(&::vtree::diff::Path, usize, &AllNodes)
+        // pub fn visit<S, F>(&self, path: &::vtree::diff::Path, index: usize, s: &mut S, f: &F)
+        //     where
+        //         F: ::std::ops::Fn(
+        //             &::vtree::diff::Path,
+        //             usize,
+        //             &AllNodes,
+        //             &mut S,
+        //             &::std::ops::Fn(&mut S)
+        //         ),
+        // {
+        //     let cb = &|s: &mut S| {
+        //         match self {
+        //             #(#variants)*
+        //             _ => (),
+        //         }
+        //     };
+        //     f(path, index, self, s, cb);
+        // }
+
+        pub fn visit_enter<F>(curr: &::vtree::diff::PathFrame<AllNodes>, f: &mut F)
+            where F: ::std::ops::FnMut(&::vtree::diff::PathFrame<AllNodes>)
         {
-            f(path, index, self);
-            match self {
+            f(curr);
+            match curr.node() {
                 #(#variants_enter)*
                 _ => (),
             }
         }
 
-        pub fn visit_exit<F>(&self, path: &::vtree::diff::Path, index: usize, f: &mut F)
-            where F: ::std::ops::FnMut(&::vtree::diff::Path, usize, &AllNodes)
+        pub fn visit_exit<F>(curr: &::vtree::diff::PathFrame<AllNodes>, f: &mut F)
+            where F: ::std::ops::FnMut(&::vtree::diff::PathFrame<AllNodes>)
         {
-            match self {
+            match curr.node() {
                 #(#variants_exit)*
                 _ => (),
             }
-            f(path, index, self);
+            f(curr);
         }
     }
 }

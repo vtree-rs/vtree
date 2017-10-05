@@ -153,21 +153,29 @@ impl<G, AN> Multi<G, AN>
 
     pub fn diff<'a>(&'a self,
                     last: &'a Multi<G, AN>)
-                    -> impl Iterator<Item = (&'a Key, usize, StdOption<&'a AN>, StdOption<&'a AN>)> + 'a {
+                    -> impl Iterator<Item = (
+                        &'a Key,
+                        StdOption<(usize, &'a AN)>,
+                        StdOption<(usize, &'a AN)>,
+                    )> + 'a {
         last.nodes
             .iter()
             .enumerate()
             .filter_map(move |(i, (k, n))| {
                 if !self.nodes.contains_key(k) {
                     // removed
-                    Some((k, i, None, Some(n)))
+                    Some((k, None, Some((i, n))))
                 } else {
                     None
                 }
             })
             .chain(self.nodes.iter().enumerate().map(move |(i, (k, n))| {
                 // unchanged or added
-                (k, i, Some(n), last.nodes.get(k))
+                (
+                    k,
+                    Some((i, n)),
+                    last.nodes.get_pair_index(k).map(|p| (p.0, p.2)),
+                )
             }))
     }
 

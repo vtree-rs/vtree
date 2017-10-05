@@ -80,7 +80,7 @@ pub fn render_node(node: Node) -> Tokens {
                                 };
                                 render_value(key
                                         .as_ref()
-                                        .unwrap_or(&Value::Int((100000 + index) as u64)))
+                                        .unwrap_or(&Value::Int(u64::max_value() - index as u64)))
                             };
                             let child_rendered = render_node(child);
                             quote!{
